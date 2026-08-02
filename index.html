@@ -252,9 +252,17 @@ input.err,select.err{border-color:#e74c3c!important;}
 .acrd-ico{font-size:28px;line-height:1;}
 .acrd-txt{font-size:13px;line-height:1.25;}
 .acrd-item:not(.open) .acrd-arrow{display:none;}
-.acrd-item.open .acrd-hdr{flex-direction:row;justify-content:space-between;text-align:left;min-height:58px;padding:0 18px;gap:10px;}
+/* Con una opcion abierta, las demas se quitan de en medio: la pantalla
+   es solo de esa opcion, como entrar a un menu. */
+.cfg-grid.con-detalle .acrd-item:not(.open){display:none;}
+.acrd-item.open{border-color:#d8c9b8;}
+.acrd-item.open .acrd-hdr{flex-direction:row;justify-content:flex-start;text-align:left;min-height:60px;padding:0 16px;gap:10px;background:#f7f2ec;border-bottom:1px solid #eee4d8;}
 .acrd-item.open .acrd-ico{font-size:20px;}
 .acrd-item.open .acrd-txt{flex:1;font-size:16px;}
+/* La flecha pasa al inicio y se convierte en "volver" */
+.acrd-item.open .acrd-arrow{order:-1;display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:#fff;border:1.5px solid #e0d5c5;font-size:17px;color:#8a4a20;transform:none;flex-shrink:0;}
+.acrd-item.open .acrd-arrow.open{transform:none;}
+.acrd-item.open .acrd-hdr:active .acrd-arrow{background:#efe6da;}
 .acrd-hdr:active{background:#f5f5f5;}
 .acrd-arrow{font-size:12px;color:#aaa;transition:transform .2s;}
 .acrd-arrow.open{transform:rotate(180deg);}
@@ -2698,19 +2706,49 @@ function cambiarMesas(delta){
 }
 
 // ===== ACORDEÓN CONFIG =====
+// La configuración funciona como un menú: al elegir una opción, esa opción
+// ocupa toda la pantalla y las demás desaparecen. Se vuelve con la flecha.
 function toggleAcrd(id){
   const item=document.getElementById('acrd-'+id);if(!item)return;
   const body=item.querySelector('.acrd-body');
+  const abrir=body.style.display==='none';
+  if(abrir)abrirConfig(id); else volverConfig();
+}
+
+function abrirConfig(id){
+  const grid=document.querySelector('.cfg-grid');
+  // Cerrar cualquier otra que estuviera abierta
+  document.querySelectorAll('.acrd-item').forEach(it=>{
+    it.classList.remove('open');
+    const b=it.querySelector('.acrd-body');if(b)b.style.display='none';
+    const a=it.querySelector('.acrd-arrow');if(a)a.textContent='▼';
+  });
+  const item=document.getElementById('acrd-'+id);if(!item)return;
+  const body=item.querySelector('.acrd-body');
   const arrow=item.querySelector('.acrd-arrow');
-  const open=body.style.display==='none';
-  body.style.display=open?'block':'none';
-  item.classList.toggle('open',open);
-  if(arrow)arrow.classList.toggle('open',open);
-  if(open){
-    if(id==='recetas')renderRecetas();
-    if(id==='gastos')renderGastosFijosConfig();
-    if(id==='estimados'||id==='vidas')renderConfig();
-  }
+  body.style.display='block';
+  item.classList.add('open');
+  if(arrow)arrow.textContent='←';
+  if(grid)grid.classList.add('con-detalle');
+
+  if(id==='recetas')renderRecetas();
+  if(id==='gastos')renderGastosFijosConfig();
+  if(id==='estimados'||id==='vidas')renderConfig();
+
+  const sec=document.getElementById('s-config');
+  if(sec)sec.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function volverConfig(){
+  const grid=document.querySelector('.cfg-grid');
+  document.querySelectorAll('.acrd-item').forEach(it=>{
+    it.classList.remove('open');
+    const b=it.querySelector('.acrd-body');if(b)b.style.display='none';
+    const a=it.querySelector('.acrd-arrow');if(a)a.textContent='▼';
+  });
+  if(grid)grid.classList.remove('con-detalle');
+  const sec=document.getElementById('s-config');
+  if(sec)sec.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 // ===== RECETAS =====
