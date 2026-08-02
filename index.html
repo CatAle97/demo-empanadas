@@ -1063,10 +1063,11 @@ input.err,select.err{border-color:#e74c3c!important;}
     <div class="form-group">
       <label>¿Cuánto se usa por unidad?</label>
       <div style="display:flex;gap:8px;align-items:center">
-        <input id="ri-qty" type="number" min="0.001" step="0.001" value="1" style="flex:1">
-        <span id="mi-unit" style="font-size:14px;font-weight:700;color:#666;min-width:44px"></span>
+        <input id="ri-qty" type="number" min="0.001" step="1" value="1" style="flex:1">
+        <select id="ri-unit" onchange="actualizarEquivalencia()" style="width:90px;padding:12px 8px;border:1.5px solid #ddd;border-radius:12px;font-size:15px"></select>
       </div>
-      <div style="font-size:11px;color:#999;margin-top:5px">Ejemplo: 0.08 kg de carne por empanada</div>
+      <div id="mi-equiv" style="font-size:11px;color:#8a4a20;margin-top:6px;font-weight:600"></div>
+      <div style="font-size:11px;color:#999;margin-top:3px">Escribe en la medida que uses. Ejemplo: <strong>200 gr</strong> de carne por empanada.</div>
     </div>
 
     <div class="form-group">
@@ -2840,6 +2841,47 @@ function costoReceta(prod,tipo){
   return{total,sinCosto};
 }
 
+// ===== UNIDADES =====
+// El inventario guarda en su unidad grande (kg, lt) porque así se compra.
+// Pero una receta usa poquito: 200 gr, no 0.2 kg. Aquí se traduce entre
+// ambas para que nadie tenga que escribir decimales — un cero de más al
+// escribir 0.2 descuenta 2 kilos y el error pasa desapercibido.
+const FACTORES={
+  kg:[['gr',0.001],['kg',1]],
+  lt:[['ml',0.001],['lt',1]]
+};
+function unidadesDe(unitBase){
+  const b=(unitBase||'').toLowerCase();
+  return FACTORES[b]||[[unitBase||'und',1]];
+}
+// Unidad que se marca por defecto: la chica (gr/ml) cuando existe
+function unidadPreferida(unitBase){
+  const u=unidadesDe(unitBase);
+  return u[0][0];
+}
+function factorDe(unitBase,unitElegida){
+  const par=unidadesDe(unitBase).find(([u])=>u===unitElegida);
+  return par?par[1]:1;
+}
+// De lo que escribió el usuario a la unidad del inventario
+function aUnidadBase(valor,unitElegida,unitBase){
+  return valor*factorDe(unitBase,unitElegida);
+}
+// De la unidad del inventario a algo legible: 0.2 kg -> "200 gr"
+function cantidadLegible(qty,unitBase){
+  const b=(unitBase||'').toLowerCase();
+  if(FACTORES[b]&&qty<1&&qty>0){
+    const chica=FACTORES[b][0];
+    const v=qty/chica[1];
+    return{valor:+v.toFixed(3),unidad:chica[0]};
+  }
+  return{valor:+(+qty).toFixed(3),unidad:unitBase||'und'};
+}
+function textoCantidad(qty,unitBase){
+  const c=cantidadLegible(qty,unitBase);
+  return c.valor+' '+c.unidad;
+}
+
 // ===== CALCULADORA DE PRECIO =====
 // Un precio sano cubre tres cosas: los insumos, la parte proporcional
 // de los gastos fijos, y la ganancia. Aquí se calculan las tres.
@@ -3049,7 +3091,7 @@ function renderRecetaDetalle(){
         return`
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 12px;background:#f5f5f5;border-radius:8px;margin-bottom:6px;font-size:14px">
           <div>
-            <div>📦 <strong>${ing.nombre}</strong> — ${ing.qty} ${ing.unit||'und'}${costoIng}</div>
+            <div>📦 <strong>${ing.nombre}</strong> — ${textoCantidad(ing.qty,ing.unit)}${costoIng}</div>
             <div style="font-size:11px;color:#888;margin-top:2px">Se descuenta en: ${tiposVentaLabel(ing.tipos)}</div>
           </div>
           <div style="display:flex;gap:6px;flex-shrink:0">
@@ -3117,7 +3159,7 @@ function renderListaIngModal(prod){
       const t=(i.tipos&&i.tipos.length)?i.tipos:['local','llevar','delivery'];
       const solo=t.length<3?' · solo '+t.map(x=>et[x]).join('/'):'';
       return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;font-size:12px;border-bottom:1px solid #eee">
-        <span>${i.nombre} <strong>${i.qty} ${i.unit||''}</strong><span style="color:#999">${solo}</span></span>
+        <span>${i.nombre} <strong>${textoCantidad(i.qty,i.unit)}</strong><span style="color:#999">${solo}</span></span>
         <button onclick="quitarIngDesdeModal('${prod.replace(/'/g,"\\'")}','${i.nombre.replace(/'/g,"\\'")}')" style="background:none;border:none;color:#c0392b;font-size:17px;cursor:pointer;line-height:1;padding:0 4px">×</button>
       </div>`;}).join('')}
     </div>`;
@@ -3137,18 +3179,38 @@ function prefillIngReceta(){
   const nombre=document.getElementById('ri-insumo-sel').value;
   const btn=document.getElementById('ri-add-btn');
   const st=get(K.stocks).find(s=>s.name===nombre);
-  const unitLbl=document.getElementById('mi-unit');
-  if(unitLbl)unitLbl.textContent=st?st.unit:'';
+  const unitBase=st?st.unit:'und';
+  const selU=document.getElementById('ri-unit');
+
+  // Opciones de medida según cómo esté guardado el insumo en el inventario
+  selU.innerHTML=unidadesDe(unitBase).map(([u])=>`<option value="${u}">${u}</option>`).join('');
+
   const ing=prod&&nombre?(getObj(K.recetas,{})[prod]||[]).find(i=>i.nombre===nombre):null;
   if(ing){
-    document.getElementById('ri-qty').value=ing.qty;
+    const leg=cantidadLegible(ing.qty,unitBase);
+    document.getElementById('ri-qty').value=leg.valor;
+    selU.value=leg.unidad;
     setRiTipos(ing.tipos&&ing.tipos.length?ing.tipos:['local','llevar','delivery']);
     if(btn)btn.textContent='💾 Actualizar';
   }else{
-    document.getElementById('ri-qty').value='1';
+    selU.value=unidadPreferida(unitBase);
+    document.getElementById('ri-qty').value=selU.value===unitBase?'1':'100';
     setRiTipos(['local','llevar','delivery']);
-    if(btn)btn.textContent='Guardar';
+    if(btn)btn.textContent='➕ Agregar y seguir';
   }
+  actualizarEquivalencia();
+}
+// Muestra en vivo la traducción: "200 gr = 0.2 kg del inventario"
+function actualizarEquivalencia(){
+  const box=document.getElementById('mi-equiv');
+  if(!box)return;
+  const nombre=document.getElementById('ri-insumo-sel').value;
+  const st=get(K.stocks).find(s=>s.name===nombre);
+  const valor=parseFloat(document.getElementById('ri-qty').value);
+  const uSel=document.getElementById('ri-unit').value;
+  if(!st||!valor||uSel===st.unit){box.textContent='';return;}
+  const base=aUnidadBase(valor,uSel,st.unit);
+  box.textContent=`= ${+base.toFixed(4)} ${st.unit} · se descuentan del inventario`;
 }
 function editIngReceta(prod,nombre){
   abrirModalIng(prod,nombre);
@@ -3156,18 +3218,24 @@ function editIngReceta(prod,nombre){
 function addIngReceta(seguir){
   const prod=document.getElementById('receta-prod-sel').value;
   const nombre=(document.getElementById('ri-insumo-sel').value||'').trim();
-  const qty=parseFloat(document.getElementById('ri-qty').value)||1;
+  const valorEscrito=parseFloat(document.getElementById('ri-qty').value)||1;
+  const unitElegida=document.getElementById('ri-unit').value;
   const tipos=TIPOS_VENTA.filter(([t])=>{const b=document.getElementById('ri-tipo-'+t);return b&&b.classList.contains('on');}).map(([t])=>t);
   if(!prod){toast('⚠️ Selecciona un producto primero','#e67e22');return;}
   if(!nombre){toast('⚠️ Selecciona un insumo del stock','#e67e22');return;}
   const st=get(K.stocks).find(s=>s.name===nombre);
+  const unitBase=st?st.unit:'und';
+  // Se guarda siempre en la unidad del inventario: así el descuento y el
+  // costeo trabajan con un solo criterio, aunque tú escribas en gramos.
+  const qty=+aUnidadBase(valorEscrito,unitElegida,unitBase).toFixed(6);
+  if(!qty||qty<=0){toast('⚠️ La cantidad debe ser mayor a cero','#e67e22');return;}
   const recetas=getObj(K.recetas,{});
   if(!recetas[prod])recetas[prod]=[];
   const esNuevo=!recetas[prod].some(i=>i.nombre===nombre);
   recetas[prod]=recetas[prod].filter(i=>i.nombre!==nombre);
-  recetas[prod].push({nombre,qty,unit:st?st.unit:'und',tipos:tipos.length?tipos:['local','llevar','delivery']});
+  recetas[prod].push({nombre,qty,unit:unitBase,tipos:tipos.length?tipos:['local','llevar','delivery']});
   setObj(K.recetas,recetas);
-  toast((esNuevo?'✅ ':'💾 ')+nombre+(esNuevo?' agregado':' actualizado'));
+  toast((esNuevo?'✅ ':'💾 ')+nombre+' '+valorEscrito+' '+unitElegida+(esNuevo?' agregado':' actualizado'));
 
   if(seguir){
     // Se queda abierto y listo para el siguiente insumo
