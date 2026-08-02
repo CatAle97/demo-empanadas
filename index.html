@@ -664,7 +664,7 @@ input.err,select.err{border-color:#e74c3c!important;}
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
             <input id="np-nombre" type="text" placeholder="Nombre del producto" style="flex:2;min-width:160px;padding:9px 10px;border:1.5px solid #ddd;border-radius:10px;font-size:14px">
             <select id="np-cat" onchange="toggleNpCatOtra()" style="flex:1;min-width:130px;padding:9px 10px;border:1.5px solid #ddd;border-radius:10px;font-size:14px"></select>
-            <input id="np-precio" type="number" placeholder="Precio S/" min="0" step="0.5" style="width:100px;padding:9px 8px;border:1.5px solid #ddd;border-radius:10px;font-size:14px;text-align:center">
+            <input id="np-precio" type="number" placeholder="Precio (opcional)" min="0" step="0.5" style="width:130px;padding:9px 8px;border:1.5px solid #ddd;border-radius:10px;font-size:14px;text-align:center">
           </div>
           <input id="np-cat-otra" type="text" placeholder="Nombre de la nueva categoría" style="display:none;width:100%;padding:9px 10px;border:1.5px solid #ddd;border-radius:10px;font-size:14px;margin-bottom:8px;box-sizing:border-box">
           <div style="display:flex;gap:8px;align-items:center">
@@ -1081,10 +1081,13 @@ input.err,select.err{border-color:#e74c3c!important;}
       </div>
     </div>
 
+    <div id="mi-lista" style="margin-bottom:14px"></div>
+
     <div class="modal-btns">
-      <button class="btn btn-green" id="ri-add-btn" onclick="addIngReceta()">Guardar</button>
-      <button class="btn btn-gray" onclick="cerrarModalIng()">Cancelar</button>
+      <button class="btn btn-green" id="ri-add-btn" onclick="addIngReceta(true)">➕ Agregar y seguir</button>
+      <button class="btn btn-orange" onclick="addIngReceta(false)">Agregar y cerrar</button>
     </div>
+    <button class="btn btn-gray btn-full" onclick="cerrarModalIng()" style="margin-top:8px">Terminar</button>
   </div>
 </div>
 
@@ -2753,11 +2756,14 @@ function guardarProductoForm(){
   const nombre=nombreEl.value.trim();
   const catSelVal=document.getElementById('np-cat').value;
   const catOtra=document.getElementById('np-cat-otra').value.trim();
-  const precio=parseFloat(document.getElementById('np-precio').value);
+  const precioRaw=document.getElementById('np-precio').value.trim();
+  const precio=precioRaw===''?0:parseFloat(precioRaw);
   const cat=catSelVal==='__otra__'?catOtra:catSelVal;
   if(!nombre){toast('⚠️ Escribe el nombre del producto','#e67e22');return;}
   if(!cat){toast('⚠️ Falta la categoría','#e67e22');return;}
-  if(!precio||precio<=0){toast('⚠️ Escribe un precio válido','#e67e22');return;}
+  // El precio es opcional: primero se arma la receta y el sistema calcula
+  // cuánto cuesta; recién ahí conviene decidir a cuánto venderlo.
+  if(isNaN(precio)||precio<0){toast('⚠️ El precio no es válido','#e67e22');return;}
   const productos=get(K.productos);
   const yaExiste=productos.some(p=>p.nombre.toLowerCase()===nombre.toLowerCase()&&p.nombre!==_prodEditNombre);
   if(yaExiste){toast('⚠️ Ya existe un producto con ese nombre','#e67e22');return;}
@@ -2785,7 +2791,7 @@ function guardarProductoForm(){
     renderRecetas();
     document.getElementById('receta-prod-sel').value=nombre;
     renderRecetaDetalle();
-    toast('✅ "'+nombre+'" creado — ahora arma su receta abajo');
+    toast('✅ "'+nombre+'" creado — arma su receta y el sistema te dirá a cuánto venderlo');
   }
 }
 function eliminarProducto(nombre){
@@ -2814,11 +2820,18 @@ function precioProducto(nombre){
   }
   return 0;
 }
-function costoReceta(prod){
+// Costo de insumos de un producto. Si se indica el tipo de venta
+// (local/llevar/delivery) solo cuenta los insumos que aplican a ese tipo:
+// una empanada en mesa no gasta bolsa, y por lo tanto cuesta menos.
+function costoReceta(prod,tipo){
   const ings=getObj(K.recetas,{})[prod]||[];
   const stocks=get(K.stocks);
   let sinCosto=false;
   const total=ings.reduce((sum,ing)=>{
+    if(tipo){
+      const tipos=(ing.tipos&&ing.tipos.length)?ing.tipos:['local','llevar','delivery'];
+      if(!tipos.includes(tipo))return sum;
+    }
     const st=stocks.find(s=>s.name.toLowerCase()===ing.nombre.toLowerCase());
     const cu=st?costoUnitStock(st):0;
     if(!cu)sinCosto=true;
@@ -2826,6 +2839,193 @@ function costoReceta(prod){
   },0);
   return{total,sinCosto};
 }
+
+// ===== CALCULADORA DE PRECIO =====
+// Un precio sano cubre tres cosas: los insumos, la parte proporcional
+// de los gastos fijos, y la ganancia. Aquí se calculan las tres.
+const MARGEN_OBJETIVO_DEF=0.50;   // 55% sobre el precio de venta
+const UNIDADES_DIA_DEF=90;
+
+// Cuántas unidades se venderán en el mes. De este número depende cuánto
+// gasto fijo carga cada producto, así que conviene ser prudente:
+// proyectar un mes entero a partir de dos días de ventas da cifras absurdas.
+// Solo se usa el ritmo real cuando hay historia suficiente para confiar en él.
+const DIAS_MIN_HISTORIA=7;
+const UNIDADES_MIN_HISTORIA=100;
+
+function unidadesMesEstimadas(){
+  const cfg=getConfig();
+  const ahora=new Date();
+  const diasMes=new Date(ahora.getFullYear(),ahora.getMonth()+1,0).getDate();
+  const porDia=cfg.unidadesDia||UNIDADES_DIA_DEF;
+
+  const pedidos=get(K.orders).filter(o=>{
+    if(!o.pagado||!o.date)return false;
+    const p=o.date.split('-');
+    return parseInt(p[0])===ahora.getFullYear()&&parseInt(p[1])===(ahora.getMonth()+1);
+  });
+  const unidadesReales=pedidos.reduce((s,o)=>s+((o.items||[]).length),0);
+  const diasConVenta=new Set(pedidos.map(o=>o.date)).size;
+
+  if(diasConVenta>=DIAS_MIN_HISTORIA&&unidadesReales>=UNIDADES_MIN_HISTORIA){
+    return{
+      unidades:Math.round(unidadesReales/diasConVenta*diasMes),
+      origen:'ritmo real ('+Math.round(unidadesReales/diasConVenta)+' al día en '+diasConVenta+' días)',
+      confiable:true
+    };
+  }
+  return{
+    unidades:Math.round(porDia*diasMes),
+    origen:'estimado de '+porDia+' unidades al día',
+    confiable:false,
+    pocosDatos:unidadesReales>0
+  };
+}
+
+function gastoFijoPorUnidad(){
+  const cfg=getConfig();
+  const fijos=(cfg.gastosFijos||[]).reduce((s,g)=>s+g.monto,0);
+  const {unidades,origen}=unidadesMesEstimadas();
+  return{valor:unidades>0?fijos/unidades:0,fijos,unidades,origen};
+}
+
+function margenObjetivo(){
+  const m=getConfig().margenObjetivo;
+  return(typeof m==='number'&&m>0&&m<0.95)?m:MARGEN_OBJETIVO_DEF;
+}
+
+// Devuelve el análisis completo de precio de un producto
+function analisisPrecio(prod){
+  const gf=gastoFijoPorUnidad();
+  const tipos=['local','llevar','delivery'].map(t=>{
+    const c=costoReceta(prod,t);
+    return{tipo:t,insumos:c.total,sinCosto:c.sinCosto,costoReal:c.total+gf.valor};
+  });
+  // Se toma el escenario más caro para no fijar un precio que pierda plata
+  const peor=tipos.reduce((a,b)=>b.costoReal>a.costoReal?b:a,tipos[0]);
+  const m=margenObjetivo();
+  const sugerido=peor.costoReal>0?peor.costoReal/(1-m):0;
+  const actual=precioProducto(prod);
+  const margenActual=actual>0?(actual-peor.costoReal)/actual:null;
+  return{tipos,peor,gf,margen:m,sugerido,actual,margenActual,
+    sinCosto:tipos.some(t=>t.sinCosto)};
+}
+function renderCalculadoraPrecio(prod){
+  const a=analisisPrecio(prod);
+  const et={local:'🍽️ En mesa',llevar:'🥡 Para llevar',delivery:'🛵 Delivery'};
+  const dif=a.actual-a.sugerido;
+  const okMargen=a.margenActual!==null&&a.margenActual>=a.margen-0.02;
+  const bajoCosto=a.actual>0&&a.actual<a.peor.costoReal;
+
+  return `
+  <div style="border:2px solid #8a4a20;border-radius:12px;overflow:hidden;margin-bottom:16px">
+    <div style="background:#8a4a20;color:#fff;padding:10px 14px;font-size:14px;font-weight:800">
+      💰 Cuánto cuesta y a cuánto venderlo
+    </div>
+    <div style="padding:14px;background:#fffdf9">
+
+      <div style="font-size:11px;font-weight:800;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">1 · Insumos según cómo se venda</div>
+      ${a.tipos.map(t=>`
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0ede8;font-size:13px">
+          <span>${et[t.tipo]}</span>
+          <strong>S/${t.insumos.toFixed(2)}</strong>
+        </div>`).join('')}
+      <div style="font-size:11px;color:#999;margin-top:6px">La diferencia es el empaque: en mesa no se gasta bolsa ni caja.</div>
+
+      <div style="font-size:11px;font-weight:800;color:#888;text-transform:uppercase;letter-spacing:.5px;margin:14px 0 8px">2 · Parte de los gastos fijos</div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px solid #f0ede8">
+        <span>Alquiler, luz, sueldos… por unidad</span>
+        <strong>S/${a.gf.valor.toFixed(2)}</strong>
+      </div>
+      <div style="font-size:11px;color:#999;margin-top:6px">
+        S/${a.gf.fijos.toFixed(0)} al mes ÷ ${a.gf.unidades} unidades — ${a.gf.origen}
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:10px;background:#fff;border:1px solid #eee;border-radius:8px;padding:8px 10px">
+        <span style="font-size:12px;color:#666;flex:1">¿Cuántas unidades vendes al día?</span>
+        <input type="number" id="cfg-und-dia" value="${getConfig().unidadesDia||UNIDADES_DIA_DEF}" min="1" step="5"
+          style="width:70px;padding:6px;border:1.5px solid #ddd;border-radius:8px;font-size:14px;text-align:center">
+        <button class="btn btn-sm btn-green" onclick="setUnidadesDia('${prod.replace(/'/g,"\\'")}')">Aplicar</button>
+      </div>
+      <div style="font-size:11px;color:#999;margin-top:5px">
+        Este número cambia todo el cálculo: mientras más vendas, menos gasto fijo carga cada unidad.
+      </div>
+      ${a.gf.pocosDatos?'<div style="font-size:11px;color:#856404;background:#fff8e1;border-radius:6px;padding:7px 9px;margin-top:7px">📊 Todavía hay pocas ventas registradas para calcular el ritmo real. Se usa tu estimado.</div>':''}
+
+      <div style="background:#f5f0e8;border-radius:10px;padding:12px 14px;margin:14px 0">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:13px;font-weight:700">Te cuesta producirla</span>
+          <strong style="font-size:22px;color:#8a4a20">S/${a.peor.costoReal.toFixed(2)}</strong>
+        </div>
+        <div style="font-size:11px;color:#888;margin-top:4px">
+          Insumos S/${a.peor.insumos.toFixed(2)} + gastos fijos S/${a.gf.valor.toFixed(2)} · escenario más caro (${et[a.peor.tipo].replace(/^\S+\s/,'')})
+        </div>
+      </div>
+
+      <div style="font-size:11px;font-weight:800;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">3 · Precio recomendado</div>
+      <div style="background:#e8f1ec;border-radius:10px;padding:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div>
+            <div style="font-size:12px;color:#666">Con ${(a.margen*100).toFixed(0)}% de ganancia</div>
+            <strong style="font-size:28px;color:#1B5E35">S/${a.sugerido.toFixed(2)}</strong>
+          </div>
+          <button class="btn btn-green" onclick="aplicarPrecioSugerido('${prod.replace(/'/g,"\\'")}',${a.sugerido.toFixed(2)})">Usar este precio</button>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <span style="font-size:11px;color:#666">Probar con otro margen:</span>
+          ${[40,50,55,60,65].map(m=>`<button class="btn btn-sm ${Math.round(a.margen*100)===m?'btn-green':'btn-outline'}" onclick="setMargenObjetivo(${m/100},'${prod.replace(/'/g,"\\'")}')">${m}%</button>`).join('')}
+        </div>
+      </div>
+
+      <div style="margin-top:12px;padding:12px 14px;border-radius:10px;background:${bajoCosto?'#FDECEA':okMargen?'#E3F2E7':'#fff8e1'}">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:13px;font-weight:700">Tu precio actual</span>
+          <strong style="font-size:18px">S/${a.actual.toFixed(2)}</strong>
+        </div>
+        <div style="font-size:12px;margin-top:6px;color:${bajoCosto?'#B3261E':okMargen?'#1B5E35':'#856404'}">
+          ${bajoCosto
+            ? `🔴 <strong>Estás vendiendo por debajo del costo.</strong> Pierdes S/${(a.peor.costoReal-a.actual).toFixed(2)} en cada una.`
+            : a.margenActual===null
+              ? 'Sin precio asignado todavía.'
+              : okMargen
+                ? `✅ Te deja S/${(a.actual-a.peor.costoReal).toFixed(2)} limpios por unidad (${(a.margenActual*100).toFixed(0)}% de ganancia).`
+                : `⚠️ Te deja S/${(a.actual-a.peor.costoReal).toFixed(2)} por unidad (${(a.margenActual*100).toFixed(0)}%). Está por debajo del ${(a.margen*100).toFixed(0)}% que buscas: te faltan S/${Math.abs(dif).toFixed(2)}.`}
+        </div>
+      </div>
+
+      ${a.sinCosto?'<div style="font-size:11px;color:#e67e22;margin-top:10px">⚠️ Hay insumos sin "costo total" cargado en Stock. El costo real es mayor que el mostrado.</div>':''}
+    </div>
+  </div>`;
+}
+
+function setUnidadesDia(prod){
+  const v=parseInt(document.getElementById('cfg-und-dia').value);
+  if(!v||v<1){toast('⚠️ Escribe cuántas unidades vendes al día','#e67e22');return;}
+  const cfg=getConfig();cfg.unidadesDia=v;setConfig(cfg);
+  renderRecetaDetalle();
+  toast('Calculado sobre '+v+' unidades al día');
+}
+
+function setMargenObjetivo(m,prod){
+  const cfg=getConfig();cfg.margenObjetivo=m;setConfig(cfg);
+  renderRecetaDetalle();
+  toast('Margen objetivo: '+(m*100).toFixed(0)+'%');
+}
+
+function aplicarPrecioSugerido(prod,precio){
+  const redondeado=Math.round(precio*2)/2;   // a los 50 céntimos más cercanos
+  showConfirm(`¿Poner el precio de "${prod}" en S/${redondeado.toFixed(2)}?`,()=>{
+    const productos=get(K.productos);
+    const p=productos.find(x=>x.nombre===prod);
+    if(!p){toast('No se encontró el producto','#c0392b');return;}
+    p.precio=redondeado;
+    set(K.productos,productos);
+    renderRecetas();
+    document.getElementById('receta-prod-sel').value=prod;
+    renderRecetaDetalle();
+    toast('✅ '+prod+' ahora cuesta S/'+redondeado.toFixed(2));
+  },'Sí, aplicar');
+}
+
 function renderRecetaDetalle(){
   const sel=document.getElementById('receta-prod-sel');
   const box=document.getElementById('receta-detalle');
@@ -2835,25 +3035,12 @@ function renderRecetaDetalle(){
   const recetas=getObj(K.recetas,{});
   const ings=recetas[prod]||[];
   const stocks=get(K.stocks);
-  const precio=precioProducto(prod);
-  const{total:costo,sinCosto}=costoReceta(prod);
-  const margen=precio-costo;
-  const margenPct=precio>0?(margen/precio*100):0;
-  const colorMargen=margen>=0?'#8a4a20':'#c0392b';
   box.innerHTML=`
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px">
       <button class="btn btn-gray btn-sm" onclick="editarProductoActual()">✏️ Editar producto</button>
       <button class="btn btn-danger btn-sm" onclick="eliminarProducto('${prod.replace(/'/g,"\\'")}')">🗑️ Eliminar producto</button>
     </div>
-    ${ings.length?`
-    <div style="background:#f5faf5;border-radius:10px;padding:12px 14px;margin-bottom:14px">
-      <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;font-size:13px">
-        <span>💵 Precio venta<br><strong style="font-size:15px">S/${precio.toFixed(2)}</strong></span>
-        <span>🧾 Costo receta<br><strong style="font-size:15px">S/${costo.toFixed(2)}</strong></span>
-        <span>📈 Margen<br><strong style="font-size:15px;color:${colorMargen}">S/${margen.toFixed(2)} (${margenPct.toFixed(0)}%)</strong></span>
-      </div>
-      ${sinCosto?'<div style="font-size:11px;color:#e67e22;margin-top:8px">⚠️ Algún insumo no tiene "costo total" registrado en Stock — el costo real es mayor al mostrado</div>':''}
-    </div>`:''}
+    ${ings.length?renderCalculadoraPrecio(prod):''}
     <div style="margin-bottom:10px;min-height:32px">
       ${ings.length?ings.map(ing=>{
         const st=stocks.find(s=>s.name.toLowerCase()===ing.nombre.toLowerCase());
@@ -2902,9 +3089,49 @@ function abrirModalIng(prod,nombre){
   if(nombre)sel.value=nombre;
   else sel.value='';
   prefillIngReceta();
+  renderListaIngModal(prod);
   document.getElementById('modal-ing').classList.add('show');
 }
-function cerrarModalIng(){document.getElementById('modal-ing').classList.remove('show');}
+function cerrarModalIng(){
+  document.getElementById('modal-ing').classList.remove('show');
+  const prod=document.getElementById('receta-prod-sel').value;
+  renderRecetas();
+  if(prod){document.getElementById('receta-prod-sel').value=prod;renderRecetaDetalle();}
+}
+// Lista viva dentro del modal: se ve crecer la receta sin cerrar la ventana
+function renderListaIngModal(prod){
+  const box=document.getElementById('mi-lista');
+  if(!box)return;
+  const ings=getObj(K.recetas,{})[prod]||[];
+  if(!ings.length){
+    box.innerHTML='<div style="font-size:12px;color:#aaa;text-align:center;padding:10px;background:#fafafa;border-radius:8px">Esta receta todavía no tiene insumos</div>';
+    return;
+  }
+  const et={local:'Mesa',llevar:'Llevar',delivery:'Delivery'};
+  box.innerHTML=`
+    <div style="font-size:11px;font-weight:800;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">
+      Ya lleva ${ings.length} insumo${ings.length>1?'s':''}
+    </div>
+    <div style="max-height:150px;overflow-y:auto;background:#fafafa;border-radius:8px;padding:8px">
+    ${ings.map(i=>{
+      const t=(i.tipos&&i.tipos.length)?i.tipos:['local','llevar','delivery'];
+      const solo=t.length<3?' · solo '+t.map(x=>et[x]).join('/'):'';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;font-size:12px;border-bottom:1px solid #eee">
+        <span>${i.nombre} <strong>${i.qty} ${i.unit||''}</strong><span style="color:#999">${solo}</span></span>
+        <button onclick="quitarIngDesdeModal('${prod.replace(/'/g,"\\'")}','${i.nombre.replace(/'/g,"\\'")}')" style="background:none;border:none;color:#c0392b;font-size:17px;cursor:pointer;line-height:1;padding:0 4px">×</button>
+      </div>`;}).join('')}
+    </div>`;
+}
+function quitarIngDesdeModal(prod,nombre){
+  const recetas=getObj(K.recetas,{});
+  if(recetas[prod]){
+    recetas[prod]=recetas[prod].filter(i=>i.nombre!==nombre);
+    if(!recetas[prod].length)delete recetas[prod];
+  }
+  setObj(K.recetas,recetas);
+  renderListaIngModal(prod);
+  toast('Quitado: '+nombre);
+}
 function prefillIngReceta(){
   const prod=document.getElementById('receta-prod-sel').value;
   const nombre=document.getElementById('ri-insumo-sel').value;
@@ -2926,7 +3153,7 @@ function prefillIngReceta(){
 function editIngReceta(prod,nombre){
   abrirModalIng(prod,nombre);
 }
-function addIngReceta(){
+function addIngReceta(seguir){
   const prod=document.getElementById('receta-prod-sel').value;
   const nombre=(document.getElementById('ri-insumo-sel').value||'').trim();
   const qty=parseFloat(document.getElementById('ri-qty').value)||1;
@@ -2940,11 +3167,18 @@ function addIngReceta(){
   recetas[prod]=recetas[prod].filter(i=>i.nombre!==nombre);
   recetas[prod].push({nombre,qty,unit:st?st.unit:'und',tipos:tipos.length?tipos:['local','llevar','delivery']});
   setObj(K.recetas,recetas);
-  cerrarModalIng();
-  renderRecetas();
-  document.getElementById('receta-prod-sel').value=prod;
-  renderRecetaDetalle();
-  toast((esNuevo?'✅ ':'💾 ')+nombre+(esNuevo?' agregado a la receta':' actualizado'));
+  toast((esNuevo?'✅ ':'💾 ')+nombre+(esNuevo?' agregado':' actualizado'));
+
+  if(seguir){
+    // Se queda abierto y listo para el siguiente insumo
+    renderListaIngModal(prod);
+    const sel=document.getElementById('ri-insumo-sel');
+    sel.value='';
+    prefillIngReceta();
+    sel.focus();
+  }else{
+    cerrarModalIng();
+  }
 }
 function delIngReceta(prod,nombre){
   const recetas=getObj(K.recetas,{});
@@ -3471,12 +3705,12 @@ function renderMetaMensual(){
 // Negocio ficticio. Ningún dato aquí es real.
 // Para reiniciar todo: botón "Reiniciar demo" o borrar el localStorage.
 // ===================================================================
-const DEMO_SEED_VERSION=1;
+const DEMO_SEED_VERSION=2;
 
 // --- Insumos: [nombre, unidad, cantidad, mínimo, costo total del lote] ---
 const DEMO_STOCK=[
   // Masa y base
-  ['Masa de empanada','unid',480,100,240],
+  ['Masa de empanada','unid',480,100,120],
   ['Harina','kg',25,5,87.5],
   ['Manteca','kg',6,2,42],
   ['Huevo','unid',60,12,30],
@@ -3531,23 +3765,23 @@ const _i=(nombre,qty,unit,tipos)=>({nombre,qty,unit,tipos:tipos||_T});
 const _emp=()=>[_i('Servilleta',1,'unid'),_i('Bolsa de papel',1,'unid',_LL),_i('Etiqueta',1,'unid',_LL)];
 
 const DEMO_RECETAS={
-  'Empanada de Carne':[_i('Masa de empanada',1,'unid'),_i('Carne molida',0.08,'kg'),_i('Cebolla',0.03,'kg'),_i('Aceituna',0.005,'kg'),_i('Huevo',0.25,'unid'),..._emp()],
-  'Empanada de Pollo':[_i('Masa de empanada',1,'unid'),_i('Pollo deshilachado',0.08,'kg'),_i('Cebolla',0.03,'kg'),_i('Ají amarillo',0.01,'kg'),..._emp()],
-  'Empanada de Queso':[_i('Masa de empanada',1,'unid'),_i('Queso',0.07,'kg'),..._emp()],
-  'Empanada de Jamón y Queso':[_i('Masa de empanada',1,'unid'),_i('Queso',0.05,'kg'),_i('Jamón',0.04,'kg'),..._emp()],
-  'Empanada de Carne Picante':[_i('Masa de empanada',1,'unid'),_i('Carne molida',0.08,'kg'),_i('Cebolla',0.03,'kg'),_i('Ají panca',0.01,'kg'),..._emp()],
-  'Empanada de Lomo Saltado':[_i('Masa de empanada',1,'unid'),_i('Lomo de res',0.09,'kg'),_i('Cebolla',0.04,'kg'),_i('Tomate',0.03,'kg'),_i('Papa',0.05,'kg'),..._emp()],
-  'Empanada de Ají de Gallina':[_i('Masa de empanada',1,'unid'),_i('Pollo deshilachado',0.07,'kg'),_i('Ají amarillo',0.02,'kg'),_i('Papa',0.03,'kg'),_i('Aceituna',0.005,'kg'),..._emp()],
-  'Empanada de Pollo con Champiñones':[_i('Masa de empanada',1,'unid'),_i('Pollo deshilachado',0.07,'kg'),_i('Champiñones',0.03,'kg'),_i('Cebolla',0.02,'kg'),..._emp()],
-  'Empanada Criolla':[_i('Masa de empanada',1,'unid'),_i('Carne molida',0.07,'kg'),_i('Cebolla',0.04,'kg'),_i('Pasas',0.01,'kg'),_i('Aceituna',0.005,'kg'),_i('Huevo',0.25,'unid'),..._emp()],
-  'Empanada Cuatro Quesos':[_i('Masa de empanada',1,'unid'),_i('Queso',0.09,'kg'),..._emp()],
-  'Empanada de Manjar':[_i('Masa de empanada',1,'unid'),_i('Manjar blanco',0.06,'kg'),_i('Azúcar',0.005,'kg'),..._emp()],
-  'Empanada de Chocolate':[_i('Masa de empanada',1,'unid'),_i('Chocolate',0.05,'kg'),..._emp()],
-  'Empanada de Manzana':[_i('Masa de empanada',1,'unid'),_i('Manzana',0.07,'kg'),_i('Azúcar',0.01,'kg'),..._emp()],
+  'Empanada de Carne':[_i('Masa de empanada',1,'unid'),_i('Carne molida',0.05,'kg'),_i('Cebolla',0.03,'kg'),_i('Aceituna',0.003,'kg'),_i('Huevo',0.15,'unid'),..._emp()],
+  'Empanada de Pollo':[_i('Masa de empanada',1,'unid'),_i('Pollo deshilachado',0.05,'kg'),_i('Cebolla',0.03,'kg'),_i('Ají amarillo',0.01,'kg'),..._emp()],
+  'Empanada de Queso':[_i('Masa de empanada',1,'unid'),_i('Queso',0.045,'kg'),..._emp()],
+  'Empanada de Jamón y Queso':[_i('Masa de empanada',1,'unid'),_i('Queso',0.035,'kg'),_i('Jamón',0.025,'kg'),..._emp()],
+  'Empanada de Carne Picante':[_i('Masa de empanada',1,'unid'),_i('Carne molida',0.05,'kg'),_i('Cebolla',0.03,'kg'),_i('Ají panca',0.01,'kg'),..._emp()],
+  'Empanada de Lomo Saltado':[_i('Masa de empanada',1,'unid'),_i('Lomo de res',0.06,'kg'),_i('Cebolla',0.04,'kg'),_i('Tomate',0.03,'kg'),_i('Papa',0.05,'kg'),..._emp()],
+  'Empanada de Ají de Gallina':[_i('Masa de empanada',1,'unid'),_i('Pollo deshilachado',0.045,'kg'),_i('Ají amarillo',0.02,'kg'),_i('Papa',0.03,'kg'),_i('Aceituna',0.003,'kg'),..._emp()],
+  'Empanada de Pollo con Champiñones':[_i('Masa de empanada',1,'unid'),_i('Pollo deshilachado',0.045,'kg'),_i('Champiñones',0.03,'kg'),_i('Cebolla',0.02,'kg'),..._emp()],
+  'Empanada Criolla':[_i('Masa de empanada',1,'unid'),_i('Carne molida',0.045,'kg'),_i('Cebolla',0.04,'kg'),_i('Pasas',0.01,'kg'),_i('Aceituna',0.003,'kg'),_i('Huevo',0.15,'unid'),..._emp()],
+  'Empanada Cuatro Quesos':[_i('Masa de empanada',1,'unid'),_i('Queso',0.06,'kg'),..._emp()],
+  'Empanada de Manjar':[_i('Masa de empanada',1,'unid'),_i('Manjar blanco',0.04,'kg'),_i('Azúcar',0.005,'kg'),..._emp()],
+  'Empanada de Chocolate':[_i('Masa de empanada',1,'unid'),_i('Chocolate',0.03,'kg'),..._emp()],
+  'Empanada de Manzana':[_i('Masa de empanada',1,'unid'),_i('Manzana',0.05,'kg'),_i('Azúcar',0.01,'kg'),..._emp()],
   // Combos: la CAJA sí se descuenta siempre (es el envase del producto)
-  'Caja x6 Clásicas':[_i('Masa de empanada',6,'unid'),_i('Carne molida',0.16,'kg'),_i('Pollo deshilachado',0.16,'kg'),_i('Queso',0.14,'kg'),_i('Cebolla',0.1,'kg'),_i('Caja x6',1,'unid'),_i('Servilleta',6,'unid'),_i('Etiqueta',1,'unid'),_i('Bolsa de papel',1,'unid',_LL)],
-  'Caja x12 Clásicas':[_i('Masa de empanada',12,'unid'),_i('Carne molida',0.32,'kg'),_i('Pollo deshilachado',0.32,'kg'),_i('Queso',0.28,'kg'),_i('Cebolla',0.2,'kg'),_i('Caja x12',1,'unid'),_i('Servilleta',12,'unid'),_i('Etiqueta',1,'unid'),_i('Bolsa de papel',1,'unid',_LL)],
-  'Caja x6 Surtida':[_i('Masa de empanada',6,'unid'),_i('Carne molida',0.08,'kg'),_i('Pollo deshilachado',0.08,'kg'),_i('Queso',0.07,'kg'),_i('Lomo de res',0.09,'kg'),_i('Manjar blanco',0.06,'kg'),_i('Chocolate',0.05,'kg'),_i('Caja x6',1,'unid'),_i('Servilleta',6,'unid'),_i('Etiqueta',1,'unid'),_i('Bolsa de papel',1,'unid',_LL)]
+  'Caja x6 Clásicas':[_i('Masa de empanada',6,'unid'),_i('Carne molida',0.10,'kg'),_i('Pollo deshilachado',0.10,'kg'),_i('Queso',0.09,'kg'),_i('Cebolla',0.1,'kg'),_i('Caja x6',1,'unid'),_i('Servilleta',6,'unid'),_i('Etiqueta',1,'unid'),_i('Bolsa de papel',1,'unid',_LL)],
+  'Caja x12 Clásicas':[_i('Masa de empanada',12,'unid'),_i('Carne molida',0.20,'kg'),_i('Pollo deshilachado',0.20,'kg'),_i('Queso',0.18,'kg'),_i('Cebolla',0.2,'kg'),_i('Caja x12',1,'unid'),_i('Servilleta',12,'unid'),_i('Etiqueta',1,'unid'),_i('Bolsa de papel',1,'unid',_LL)],
+  'Caja x6 Surtida':[_i('Masa de empanada',6,'unid'),_i('Carne molida',0.05,'kg'),_i('Pollo deshilachado',0.05,'kg'),_i('Queso',0.045,'kg'),_i('Lomo de res',0.06,'kg'),_i('Manjar blanco',0.04,'kg'),_i('Chocolate',0.03,'kg'),_i('Caja x6',1,'unid'),_i('Servilleta',6,'unid'),_i('Etiqueta',1,'unid'),_i('Bolsa de papel',1,'unid',_LL)]
 };
 
 // Ventas ya registradas del día: [cliente, producto, cantidad, tipo, método de pago]
