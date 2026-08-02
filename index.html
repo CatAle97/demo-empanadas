@@ -24,13 +24,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 /* APP */
 #app{display:none;}
 .app-header{background:#8a4a20;color:white;padding:11px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
-.ah-left{display:flex;align-items:center;gap:10px;}
-.ah-name{font-size:16px;font-weight:800;}
+.ah-left{display:flex;align-items:center;gap:10px;min-width:0;flex:1;overflow:hidden;}
+.ah-name{font-size:16px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .ah-role{font-size:11px;background:rgba(255,255,255,.2);padding:2px 9px;border-radius:10px;margin-left:4px;}
-.ah-right{display:flex;align-items:center;gap:10px;}
+.ah-right{display:flex;align-items:center;gap:12px;flex-shrink:0;}
 .ah-clock{display:flex;flex-direction:column;align-items:flex-end;line-height:1.2;}
 .ah-hora{font-size:16px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:.5px;}
-.ah-date{font-size:11px;color:rgba(255,255,255,.65);}
+.ah-date{font-size:11px;color:rgba(255,255,255,.65);white-space:nowrap;}
 .btn-logout{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:white;padding:5px 12px;border-radius:20px;font-size:12px;cursor:pointer;}
 
 /* NAV */
@@ -50,7 +50,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .card{background:white;border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.08);}
 
 /* CATEGORY TABS */
-.cat-tabs{display:flex;gap:7px;overflow-x:auto;padding-bottom:2px;margin-bottom:12px;}
+/* El degradado de la derecha avisa que la fila sigue: un scroll horizontal
+   sin pista visual hace que nadie descubra las ultimas categorias */
+.cat-tabs-wrap{position:relative;}
+.cat-tabs-wrap::after{content:"";position:absolute;top:0;right:0;bottom:4px;width:34px;pointer-events:none;background:linear-gradient(to right,rgba(255,255,255,0),#fff);}
+.cat-tabs{display:flex;gap:7px;overflow-x:auto;padding-bottom:2px;margin-bottom:12px;scrollbar-width:none;}
+.cat-tabs::-webkit-scrollbar{display:none;}
 .cat-tab{flex:0 0 auto;padding:7px 15px;border-radius:20px;border:1.5px solid #ddd;background:white;cursor:pointer;font-size:13px;font-weight:500;color:#555;}
 .cat-tab.on{background:#8a4a20;color:white;border-color:#8a4a20;}
 
@@ -92,6 +97,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 /* ACTION BTNS */
 .action-btns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;}
+/* En la columna del pedido, tres botones lado a lado parten el texto en
+   tres lineas. Cobrar es el caso normal, asi que va ancho completo. */
+#mostrador-right .action-btns{grid-template-columns:1fr 1fr;}
+#mostrador-right .action-btns .btn:first-child{grid-column:1/-1;}
 .btn{padding:10px 13px;border:none;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;}
 .btn-green{background:#8a4a20;color:white;}
 .btn-blue{background:#2563eb;color:white;}
@@ -386,7 +395,7 @@ input.err,select.err{border-color:#e74c3c!important;}
         </div>
         <div id="mesa-selector-wrap" style="margin-bottom:10px">
           <div style="font-size:12px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">🪑 Número de mesa</div>
-          <div id="mesa-selector-btns" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+          <div id="mesa-selector-btns" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:8px;"></div>
         </div>
         <div id="delivery-field" style="display:none">
           <div class="form-group" style="margin-bottom:8px">
@@ -394,33 +403,43 @@ input.err,select.err{border-color:#e74c3c!important;}
           </div>
           <div class="notice">🛵 Se agrega S/1.00 por delivery</div>
         </div>
-        <div class="cat-tabs" id="cat-tabs"></div>
+        <div class="cat-tabs-wrap"><div class="cat-tabs" id="cat-tabs"></div></div>
         <div class="prod-grid" id="prod-grid"></div>
-        <div id="o-items"></div>
-        <div id="o-total-bar" style="display:none" class="total-bar">
-          <span>Total comanda</span>
-          <span class="total-amt" id="o-total">S/0</span>
-        </div>
-        <div id="metodo-pago-wrap" style="display:none">
-          <div style="font-size:12px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Método de pago</div>
-          <div class="metodo-wrap">
-            <button class="mp-btn" id="mp-ef" onclick="selMetodo('efectivo',this)">💵 Efectivo</button>
-            <button class="mp-btn" id="mp-yp" onclick="selMetodo('yape',this)">💜 Yape</button>
-            <button class="mp-btn" id="mp-pl" onclick="selMetodo('plin',this)">💙 Plin</button>
-          </div>
-        </div>
-        <div id="action-wrap" style="display:none">
-          <div class="action-btns">
-            <button class="btn btn-green" onclick="saveOrder('pagoya')">✅ Pagado</button>
-            <button class="btn btn-blue" onclick="saveOrder('al_recibir')">⏳ Pendiente de pago</button>
-            <button class="btn btn-orange" onclick="abrirModalFiado()">🤝 Fiado</button>
-          </div>
-        </div>
-        <div id="caja-warn-pedidos"></div>
+
       </div>
     </div>
 
     <div id="mostrador-right">
+      <!-- PEDIDO EN CURSO: vive a la derecha y no se mueve, para que el
+           cajero vea siempre lo que lleva sin bajar la pantalla -->
+      <div class="caja-panel" id="pedido-panel">
+        <div class="cp-head">
+          <span class="cp-title">🧾 Pedido actual</span>
+          <span id="pedido-contador" style="font-size:12px;color:#888"></span>
+        </div>
+        <div id="pedido-vacio" class="empty" style="padding:14px 10px">Toca un producto para empezar</div>
+    <div id="o-items"></div>
+    <div id="o-total-bar" style="display:none" class="total-bar">
+      <span>Total comanda</span>
+      <span class="total-amt" id="o-total">S/0</span>
+    </div>
+    <div id="metodo-pago-wrap" style="display:none">
+      <div style="font-size:12px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Método de pago</div>
+      <div class="metodo-wrap">
+        <button class="mp-btn" id="mp-ef" onclick="selMetodo('efectivo',this)">💵 Efectivo</button>
+        <button class="mp-btn" id="mp-yp" onclick="selMetodo('yape',this)">💜 Yape</button>
+        <button class="mp-btn" id="mp-pl" onclick="selMetodo('plin',this)">💙 Plin</button>
+      </div>
+    </div>
+    <div id="action-wrap" style="display:none">
+      <div class="action-btns">
+        <button class="btn btn-green" onclick="saveOrder('pagoya')">✅ Pagado</button>
+        <button class="btn btn-blue" onclick="saveOrder('al_recibir')">⏳ Pendiente de pago</button>
+        <button class="btn btn-orange" onclick="abrirModalFiado()">🤝 Fiado</button>
+      </div>
+    </div>
+    <div id="caja-warn-pedidos"></div>
+      </div>
       <!-- CAJA PANEL -->
       <div class="caja-panel">
         <div class="cp-head">
@@ -591,29 +610,9 @@ input.err,select.err{border-color:#e74c3c!important;}
   <div class="sec" id="s-stock">
   <div style="display:grid;gap:14px;" id="stock-layout">
     <div>
-      <div class="card">
-        <div class="sec-title">Registrar entrada</div>
-        <div class="flex-row">
-          <div class="form-group">
-            <label>Insumo</label>
-            <div style="position:relative">
-              <input id="dsk-name" type="text" placeholder="Nombre" autocomplete="off"
-                oninput="dskFiltrar(this.value)" onfocus="dskFiltrar(this.value)"
-                onblur="setTimeout(()=>{const b=document.getElementById('dsk-sugg');if(b)b.style.display='none';},200)">
-              <div id="dsk-sugg" style="position:absolute;top:100%;left:0;right:0;background:white;border:2px solid #8a4a20;border-top:none;border-radius:0 0 10px 10px;z-index:200;display:none;max-height:180px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div>
-            </div>
-          </div>
-          <div class="form-group"><label>Cantidad</label><input id="dsk-qty" type="number" placeholder="0" step="0.5" min="0"></div>
-        </div>
-        <div class="flex-row">
-          <div class="form-group"><label>Unidad</label>
-            <select id="dsk-unit"><option>und</option><option>gr</option><option>kg</option><option>lt</option><option>paq</option></select>
-          </div>
-          <div class="form-group"><label>Costo total (S/)</label><input id="dsk-cost" type="number" placeholder="0.00" step="0.5" min="0"></div>
-        </div>
-        <div class="form-group"><label>Alerta mínima</label><input id="dsk-min" type="number" placeholder="Ej: 2" min="0"></div>
-        <button class="btn btn-green btn-full" onclick="saveStock(true)">Agregar al stock</button>
-      </div>
+      <button class="btn btn-green btn-full" onclick="abrirModalEntrada()" style="min-height:52px">
+        + Registrar entrada de insumos
+      </button>
     </div>
     <div>
       <div class="sec-title">Inventario actual</div>
@@ -1082,6 +1081,35 @@ input.err,select.err{border-color:#e74c3c!important;}
   </div>
 </div>
 
+<!-- MODAL: Registrar entrada de stock -->
+<div class="overlay" id="modal-entrada">
+  <div class="modal" style="max-width:460px">
+    <button class="modal-close" onclick="cerrarModalEntrada()">×</button>
+    <h3>Registrar entrada</h3>
+    <div style="font-size:12px;color:#888;margin:-8px 0 14px">Lo que acabas de comprar y entra al almacén</div>
+      <div class="flex-row">
+        <div class="form-group">
+          <label>Insumo</label>
+          <div style="position:relative">
+            <input id="dsk-name" type="text" placeholder="Nombre" autocomplete="off"
+              oninput="dskFiltrar(this.value)" onfocus="dskFiltrar(this.value)"
+              onblur="setTimeout(()=>{const b=document.getElementById('dsk-sugg');if(b)b.style.display='none';},200)">
+            <div id="dsk-sugg" style="position:absolute;top:100%;left:0;right:0;background:white;border:2px solid #8a4a20;border-top:none;border-radius:0 0 10px 10px;z-index:200;display:none;max-height:180px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div>
+          </div>
+        </div>
+        <div class="form-group"><label>Cantidad</label><input id="dsk-qty" type="number" placeholder="0" step="0.5" min="0"></div>
+      </div>
+      <div class="flex-row">
+        <div class="form-group"><label>Unidad</label>
+          <select id="dsk-unit"><option>und</option><option>gr</option><option>kg</option><option>lt</option><option>paq</option></select>
+        </div>
+        <div class="form-group"><label>Costo total (S/)</label><input id="dsk-cost" type="number" placeholder="0.00" step="0.5" min="0"></div>
+      </div>
+      <div class="form-group"><label>Alerta mínima</label><input id="dsk-min" type="number" placeholder="Ej: 2" min="0"></div>
+      <button class="btn btn-green btn-full" onclick="saveStock(true)">Agregar al stock</button>
+    <button class="btn btn-gray btn-full" onclick="cerrarModalEntrada()" style="margin-top:10px">Cancelar</button>
+  </div>
+</div>
 <!-- MODAL: Insumo de receta -->
 <div class="overlay" id="modal-ing">
   <div class="modal" style="max-width:400px">
@@ -1737,7 +1765,16 @@ function renderCart(){
   const aw=document.getElementById('action-wrap');
   const mw=document.getElementById('metodo-pago-wrap');
   const warn=document.getElementById('caja-warn-pedidos');
-  if(!cartItems.length){box.innerHTML='';bar.style.display='none';aw.style.display='none';mw.style.display='none';warn.innerHTML='';return;}
+  const vacio=document.getElementById('pedido-vacio');
+  const cont=document.getElementById('pedido-contador');
+  if(!cartItems.length){
+    box.innerHTML='';bar.style.display='none';aw.style.display='none';mw.style.display='none';warn.innerHTML='';
+    if(vacio)vacio.style.display='block';
+    if(cont)cont.textContent='';
+    return;
+  }
+  if(vacio)vacio.style.display='none';
+  if(cont)cont.textContent=cartItems.length+(cartItems.length===1?' unidad':' unidades');
   let total=0;
   // Las unidades iguales se muestran juntas ("3× Empanada de Carne"). Por dentro
   // el carrito sigue siendo una unidad por línea, que es lo que necesita el
@@ -2071,6 +2108,14 @@ function saveGasto(){
 
 
 // ===== STOCK =====
+// El formulario de entrada se usa dos veces al dia pero ocupaba toda la
+// primera pantalla de Stock, empujando abajo lo que si se consulta.
+function abrirModalEntrada(){
+  ['dsk-name','dsk-qty','dsk-cost','dsk-min'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});
+  var u=document.getElementById('dsk-unit');if(u)u.value='und';
+  document.getElementById('modal-entrada').classList.add('show');
+}
+function cerrarModalEntrada(){document.getElementById('modal-entrada').classList.remove('show');}
 function saveStock(isDueno){
   const prefix=isDueno?'dsk':'sk';
   const name=document.getElementById(prefix+'-name').value.trim();
@@ -2097,6 +2142,7 @@ function saveStock(isDueno){
     if(cajAbierta())renderCajaPanel();
   }
   ['sk-name','sk-qty','sk-cost','dsk-name','dsk-qty','dsk-cost','dsk-min'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  cerrarModalEntrada();
   toast('✅ Stock actualizado'+(cost>0?' y gasto registrado':''));
   if(isDueno)renderStockList('dueno');else renderStockList('cajera');
 }
