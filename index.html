@@ -1082,13 +1082,14 @@ input.err,select.err{border-color:#e74c3c!important;}
       </div>
     </div>
 
-    <div id="mi-lista" style="margin-bottom:14px"></div>
+    <!-- El botón vive aquí arriba, pegado a los campos: se agregan varios
+         insumos seguidos sin tener que bajar la pantalla cada vez. -->
+    <button class="btn btn-green btn-full" id="ri-add-btn" onclick="addIngReceta(true)"
+      style="min-height:56px;font-size:16px">➕ Agregar a la receta</button>
 
-    <div class="modal-btns">
-      <button class="btn btn-green" id="ri-add-btn" onclick="addIngReceta(true)">➕ Agregar y seguir</button>
-      <button class="btn btn-orange" onclick="addIngReceta(false)">Agregar y cerrar</button>
-    </div>
-    <button class="btn btn-gray btn-full" onclick="cerrarModalIng()" style="margin-top:8px">Terminar</button>
+    <div id="mi-lista" style="margin-top:16px"></div>
+
+    <button class="btn btn-gray btn-full" onclick="cerrarModalIng()" style="margin-top:14px;min-height:52px">Terminar</button>
   </div>
 </div>
 
@@ -3196,7 +3197,7 @@ function prefillIngReceta(){
     selU.value=unidadPreferida(unitBase);
     document.getElementById('ri-qty').value=selU.value===unitBase?'1':'100';
     setRiTipos(['local','llevar','delivery']);
-    if(btn)btn.textContent='➕ Agregar y seguir';
+    if(btn)btn.textContent='➕ Agregar a la receta';
   }
   actualizarEquivalencia();
 }
