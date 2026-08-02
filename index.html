@@ -3010,8 +3010,6 @@ function analisisPrecio(prod){
 function renderCalculadoraPrecio(prod){
   const a=analisisPrecio(prod);
   const et={local:'🍽️ En mesa',llevar:'🥡 Para llevar',delivery:'🛵 Delivery'};
-  const dif=a.actual-a.sugerido;
-  const okMargen=a.margenActual!==null&&a.margenActual>=a.margen-0.02;
   const bajoCosto=a.actual>0&&a.actual<a.peor.costoReal;
 
   return `
@@ -3058,40 +3056,98 @@ function renderCalculadoraPrecio(prod){
         </div>
       </div>
 
-      <div style="font-size:11px;font-weight:800;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">3 · Precio recomendado</div>
-      <div style="background:#e8f1ec;border-radius:10px;padding:14px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-          <div>
-            <div style="font-size:12px;color:#666">Con ${(a.margen*100).toFixed(0)}% de ganancia</div>
-            <strong style="font-size:28px;color:#1B5E35">S/${a.sugerido.toFixed(2)}</strong>
-          </div>
-          <button class="btn btn-green" onclick="aplicarPrecioSugerido('${prod.replace(/'/g,"\\'")}',${a.sugerido.toFixed(2)})">Usar este precio</button>
+      <div style="font-size:11px;font-weight:800;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">3 · Precio de venta</div>
+
+      <!-- Cuenta clara: precio menos costo es lo que queda -->
+      <div style="background:#fff;border:1px solid #eee;border-radius:10px;padding:14px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;font-size:14px;padding:5px 0">
+          <span>Lo vendes a</span><strong>S/${a.actual.toFixed(2)}</strong>
         </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-          <span style="font-size:11px;color:#666">Probar con otro margen:</span>
+        <div style="display:flex;justify-content:space-between;font-size:14px;padding:5px 0;color:#c0392b">
+          <span>Te cuesta producirla</span><strong>− S/${a.peor.costoReal.toFixed(2)}</strong>
+        </div>
+        <div style="border-top:2px solid #eee;margin:8px 0 0;padding-top:10px;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:14px;font-weight:700">${a.actual>=a.peor.costoReal?'Te queda limpio':'Estás perdiendo'}</span>
+          <strong style="font-size:22px;color:${a.actual>=a.peor.costoReal?'#1B5E35':'#B3261E'}">
+            S/${Math.abs(a.actual-a.peor.costoReal).toFixed(2)}
+            ${a.margenActual!==null?`<span style="font-size:14px;font-weight:600">(${(a.margenActual*100).toFixed(0)}%)</span>`:''}
+          </strong>
+        </div>
+        ${bajoCosto?'<div style="font-size:12px;color:#B3261E;margin-top:8px;font-weight:600">🔴 Cada venta te hace perder plata. Sube el precio.</div>':''}
+      </div>
+
+      <!-- Opcion A: que el sistema lo calcule -->
+      <div style="background:#e8f1ec;border-radius:10px;padding:14px;margin-bottom:10px">
+        <div style="font-size:12px;font-weight:700;color:#1B5E35;margin-bottom:8px">Opción 1 · Que el sistema lo calcule</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+          <span style="font-size:12px;color:#555">Quiero ganar el</span>
           ${[40,50,55,60,65].map(m=>`<button class="btn btn-sm ${Math.round(a.margen*100)===m?'btn-green':'btn-outline'}" onclick="setMargenObjetivo(${m/100},'${prod.replace(/'/g,"\\'")}')">${m}%</button>`).join('')}
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+          <div>
+            <div style="font-size:12px;color:#666">Entonces véndela a</div>
+            <strong style="font-size:26px;color:#1B5E35">S/${a.sugerido.toFixed(2)}</strong>
+          </div>
+          <button class="btn btn-green" onclick="aplicarPrecioSugerido('${prod.replace(/'/g,"\\'")}',${a.sugerido.toFixed(2)})">Usar S/${(Math.ceil(a.sugerido*2)/2).toFixed(2)}</button>
         </div>
       </div>
 
-      <div style="margin-top:12px;padding:12px 14px;border-radius:10px;background:${bajoCosto?'#FDECEA':okMargen?'#E3F2E7':'#fff8e1'}">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-size:13px;font-weight:700">Tu precio actual</span>
-          <strong style="font-size:18px">S/${a.actual.toFixed(2)}</strong>
+      <!-- Opcion B: que el precio lo ponga el dueño -->
+      <div style="background:#fff8e1;border-radius:10px;padding:14px">
+        <div style="font-size:12px;font-weight:700;color:#856404;margin-bottom:8px">Opción 2 · Yo pongo el precio</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span style="font-size:16px;font-weight:700;color:#856404">S/</span>
+          <input type="number" id="precio-manual" value="${a.actual.toFixed(2)}" min="0" step="0.1"
+            oninput="previsualizarPrecio('${prod.replace(/'/g,"\\'")}')"
+            style="flex:1;max-width:120px;padding:10px;border:1.5px solid #e0c98a;border-radius:10px;font-size:17px;font-weight:700;text-align:center">
+          <button class="btn btn-orange" onclick="guardarPrecioManual('${prod.replace(/'/g,"\\'")}')">Guardar</button>
         </div>
-        <div style="font-size:12px;margin-top:6px;color:${bajoCosto?'#B3261E':okMargen?'#1B5E35':'#856404'}">
-          ${bajoCosto
-            ? `🔴 <strong>Estás vendiendo por debajo del costo.</strong> Pierdes S/${(a.peor.costoReal-a.actual).toFixed(2)} en cada una.`
-            : a.margenActual===null
-              ? 'Sin precio asignado todavía.'
-              : okMargen
-                ? `✅ Te deja S/${(a.actual-a.peor.costoReal).toFixed(2)} limpios por unidad (${(a.margenActual*100).toFixed(0)}% de ganancia).`
-                : `⚠️ Te deja S/${(a.actual-a.peor.costoReal).toFixed(2)} por unidad (${(a.margenActual*100).toFixed(0)}%). Está por debajo del ${(a.margen*100).toFixed(0)}% que buscas: te faltan S/${Math.abs(dif).toFixed(2)}.`}
-        </div>
+        <div id="precio-preview" style="font-size:13px;margin-top:10px;color:#856404"></div>
       </div>
 
       ${a.sinCosto?'<div style="font-size:11px;color:#e67e22;margin-top:10px">⚠️ Hay insumos sin "costo total" cargado en Stock. El costo real es mayor que el mostrado.</div>':''}
     </div>
   </div>`;
+}
+
+// Mientras escribe el precio, muestra cuánto ganaría con ese número
+function previsualizarPrecio(prod){
+  const box=document.getElementById('precio-preview');
+  if(!box)return;
+  const v=parseFloat(document.getElementById('precio-manual').value);
+  const a=analisisPrecio(prod);
+  if(!v||v<=0){box.innerHTML='<span style="color:#999">Escribe un precio para ver cuánto ganarías.</span>';return;}
+  const queda=v-a.peor.costoReal;
+  const pct=(queda/v*100);
+  if(queda<0){
+    box.innerHTML=`🔴 <strong>Perderías S/${Math.abs(queda).toFixed(2)}</strong> en cada venta. Te cuesta S/${a.peor.costoReal.toFixed(2)} producirla.`;
+    box.style.color='#B3261E';
+  }else{
+    box.innerHTML=`Con S/${v.toFixed(2)} te quedarían <strong>S/${queda.toFixed(2)}</strong> limpios por unidad — el <strong>${pct.toFixed(0)}%</strong>.`;
+    box.style.color=pct>=a.margen*100-2?'#1B5E35':'#856404';
+  }
+}
+
+function guardarPrecioManual(prod){
+  const v=parseFloat(document.getElementById('precio-manual').value);
+  if(!v||v<=0){toast('⚠️ Escribe un precio válido','#e67e22');return;}
+  const a=analisisPrecio(prod);
+  const aplicar=()=>{
+    const productos=get(K.productos);
+    const p=productos.find(x=>x.nombre===prod);
+    if(!p){toast('No se encontró el producto','#c0392b');return;}
+    p.precio=v;
+    set(K.productos,productos);
+    renderRecetas();
+    document.getElementById('receta-prod-sel').value=prod;
+    renderRecetaDetalle();
+    toast('✅ '+prod+' ahora cuesta S/'+v.toFixed(2));
+  };
+  if(v<a.peor.costoReal){
+    showConfirm(`S/${v.toFixed(2)} está por debajo de lo que te cuesta producirla (S/${a.peor.costoReal.toFixed(2)}). Perderías S/${(a.peor.costoReal-v).toFixed(2)} en cada venta. ¿Lo guardo igual?`,aplicar,'Guardar igual');
+  }else{
+    aplicar();
+  }
 }
 
 function setUnidadesDia(prod){
@@ -3109,7 +3165,7 @@ function setMargenObjetivo(m,prod){
 }
 
 function aplicarPrecioSugerido(prod,precio){
-  const redondeado=Math.round(precio*2)/2;   // a los 50 céntimos más cercanos
+  const redondeado=Math.ceil(precio*2)/2;   // hacia arriba a los 50 centimos: redondear hacia abajo dejaria el precio por debajo del margen buscado
   showConfirm(`¿Poner el precio de "${prod}" en S/${redondeado.toFixed(2)}?`,()=>{
     const productos=get(K.productos);
     const p=productos.find(x=>x.nombre===prod);
