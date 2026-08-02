@@ -699,7 +699,7 @@ input.err,select.err{border-color:#e74c3c!important;}
           <button class="btn btn-green" onclick="addGastoFijo()" style="white-space:nowrap">+ Agregar</button>
         </div>
         <div style="font-size:11px;color:#999;margin-top:6px">
-          El día de pago es opcional, pero si lo pones el sistema te avisa cuánto necesitas juntar antes de cada vencimiento.
+          Con el día de pago, el sistema te avisa cuánto juntar antes de cada vencimiento.
         </div>
       </div>
     </div>
@@ -1098,7 +1098,7 @@ input.err,select.err{border-color:#e74c3c!important;}
         <select id="ri-unit" onchange="actualizarEquivalencia()" style="width:90px;padding:12px 8px;border:1.5px solid #ddd;border-radius:12px;font-size:15px"></select>
       </div>
       <div id="mi-equiv" style="font-size:11px;color:#8a4a20;margin-top:6px;font-weight:600"></div>
-      <div style="font-size:11px;color:#999;margin-top:3px">Escribe en la medida que uses. Ejemplo: <strong>200 gr</strong> de carne por empanada.</div>
+      <div style="font-size:11px;color:#999;margin-top:3px">Ejemplo: <strong>200 gr</strong> de carne por empanada.</div>
     </div>
 
     <!-- Pegado a los campos: se cargan varios insumos seguidos sin bajar la pantalla -->
@@ -1113,7 +1113,7 @@ input.err,select.err{border-color:#e74c3c!important;}
         <button type="button" class="type-btn on" id="ri-tipo-delivery" onclick="toggleRiTipo('delivery')">🛵 Delivery</button>
       </div>
       <div style="font-size:11px;color:#999;margin-top:6px">
-        Apaga <strong>Mesa</strong> en cajas, bolsas y etiquetas: solo se gastan si el pedido sale del local.
+        Apaga <strong>Mesa</strong> en cajas, bolsas y etiquetas.
       </div>
     </div>
 
@@ -3032,7 +3032,7 @@ function renderCalculadoraPrecio(prod){
           <span>${et[t.tipo]}</span>
           <strong>S/${t.insumos.toFixed(2)}</strong>
         </div>`).join('')}
-      <div style="font-size:11px;color:#999;margin-top:6px">La diferencia es el empaque: en mesa no se gasta bolsa ni caja.</div>
+      ${bloqueAyuda("empaque","¿Por qué cambia según cómo se venda?","En mesa no se gasta bolsa ni caja: el cliente come ahí. Por eso la misma empanada cuesta menos en mesa que para llevar. El sistema toma el escenario más caro para fijar el precio, así nunca te quedas corto.")}
 
       <div style="font-size:11px;font-weight:800;color:#888;text-transform:uppercase;letter-spacing:.5px;margin:14px 0 8px">2 · Parte de los gastos fijos</div>
       <div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px solid #f0ede8">
@@ -3048,9 +3048,8 @@ function renderCalculadoraPrecio(prod){
           style="width:70px;padding:6px;border:1.5px solid #ddd;border-radius:8px;font-size:14px;text-align:center">
         <button class="btn btn-sm btn-green" onclick="setUnidadesDia('${prod.replace(/'/g,"\\'")}')">Aplicar</button>
       </div>
-      <div style="font-size:11px;color:#999;margin-top:5px">
-        Este número cambia todo el cálculo: mientras más vendas, menos gasto fijo carga cada unidad.
-      </div>
+      ${bloqueAyuda('unidades','¿Por qué importa cuántas vendo al día?',
+        'El alquiler y los sueldos son los mismos vendas 50 o 200 empanadas al día. Mientras más vendas, menos gasto fijo carga cada una y más barato te sale producirla. Por eso este número cambia el precio recomendado.')}
       ${a.gf.pocosDatos?'<div style="font-size:11px;color:#856404;background:#fff8e1;border-radius:6px;padding:7px 9px;margin-top:7px">📊 Todavía hay pocas ventas registradas para calcular el ritmo real. Se usa tu estimado.</div>':''}
 
       <div style="background:#f5f0e8;border-radius:10px;padding:12px 14px;margin:14px 0">
@@ -3059,7 +3058,7 @@ function renderCalculadoraPrecio(prod){
           <strong style="font-size:22px;color:#8a4a20">S/${a.peor.costoReal.toFixed(2)}</strong>
         </div>
         <div style="font-size:11px;color:#888;margin-top:4px">
-          Insumos S/${a.peor.insumos.toFixed(2)} + gastos fijos S/${a.gf.valor.toFixed(2)} · escenario más caro (${et[a.peor.tipo].replace(/^\S+\s/,'')})
+          Insumos S/${a.peor.insumos.toFixed(2)} + gastos fijos S/${a.gf.valor.toFixed(2)}
         </div>
       </div>
 
@@ -3745,6 +3744,29 @@ function renderGastosFijosConfig(){
     </div>`;
 }
 
+// ===== AYUDA PLEGABLE =====
+// Las explicaciones del metodo valen la primera semana y estorban despues.
+// Quedan a un toque de distancia en vez de ocupar la pantalla siempre.
+function bloqueAyuda(clave,etiqueta,texto){
+  const id='ayuda-'+clave;
+  return `<div style="margin:8px 0 14px">
+    <button onclick="toggleAyuda('${id}')" id="btn-${id}"
+      style="background:none;border:none;padding:4px 0;font-size:12px;color:#8a4a20;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:5px">
+      <span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;border:1.5px solid #8a4a20;font-size:11px;line-height:1">i</span>
+      ${etiqueta}
+    </button>
+    <div id="${id}" style="display:none;font-size:12px;color:#666;line-height:1.55;background:#f7f4f0;border-radius:8px;padding:10px 12px;margin-top:6px">${texto}</div>
+  </div>`;
+}
+function toggleAyuda(id){
+  const e=document.getElementById(id);
+  if(!e)return;
+  const abrir=e.style.display==='none';
+  e.style.display=abrir?'block':'none';
+  const b=document.getElementById('btn-'+id);
+  if(b)b.style.opacity=abrir?'1':'';
+}
+
 // ===== PRÓXIMOS PAGOS =====
 // Un mes rentable no sirve de nada si el día que vence el alquiler no hay
 // plata en caja. Esto traduce cada vencimiento a cuánto hay que vender antes.
@@ -3898,13 +3920,9 @@ function renderMetaMensual(){
       <div class="stat-card"><div class="sc-val" style="color:#c0392b">${equilibrio?fmt(equilibrio):'—'}</div><div class="sc-lbl">Punto de equilibrio</div></div>
     </div>
 
-    <div style="background:#f7f7f5;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:#666;line-height:1.5">
-      💡 <strong>Cómo se lee:</strong> de cada S/1 que vendes, te quedan
-      <strong>${mcPct!==null?'S/'+mcPct.toFixed(2):'—'}</strong> después de pagar los insumos.
-      El resto se fue en masa, relleno y empaque. Por eso, para cubrir
-      <strong>${fmt(totalFijos)}</strong> de gastos fijos no basta con vender esa cifra:
-      hay que vender <strong>${equilibrio?fmt(equilibrio):'—'}</strong>.
-    </div>
+    ${bloqueAyuda('equilibrio','¿Por qué el punto de equilibrio es más alto que mis gastos fijos?',
+      `De cada S/1 que vendes te quedan <strong>${mcPct!==null?'S/'+mcPct.toFixed(2):'—'}</strong> después de pagar los insumos. El resto se fue en masa, relleno y empaque.<br><br>
+       Por eso, para cubrir <strong>${fmt(totalFijos)}</strong> de gastos fijos no basta con vender esa cifra: hay que vender <strong>${equilibrio?fmt(equilibrio):'—'}</strong>.`)}
 
     <div style="margin-bottom:6px;display:flex;justify-content:space-between;font-size:13px;color:#555">
       <span>Avance hacia el punto de equilibrio</span><strong style="color:${barColor}">${pct}%</strong>
