@@ -689,10 +689,17 @@ input.err,select.err{border-color:#e74c3c!important;}
       <div class="acrd-body" style="display:none">
         <p style="font-size:12px;color:#888;margin-bottom:12px">Alquiler, luz, gas, personal, etc.</p>
         <div id="cfg-gastos-fijos"></div>
-        <div style="display:flex;gap:8px;margin-top:10px">
-          <input id="gf-nombre" type="text" placeholder="Ej: Alquiler" style="flex:2;padding:9px 12px;border:1.5px solid #ddd;border-radius:10px;font-size:14px">
-          <input id="gf-monto" type="number" placeholder="S/0" min="0" step="10" style="flex:1;padding:9px 12px;border:1.5px solid #ddd;border-radius:10px;font-size:14px">
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center">
+          <input id="gf-nombre" type="text" placeholder="Ej: Alquiler" style="flex:2;min-width:130px;padding:9px 12px;border:1.5px solid #ddd;border-radius:10px;font-size:14px">
+          <input id="gf-monto" type="number" placeholder="S/0" min="0" step="10" style="flex:1;min-width:80px;padding:9px 12px;border:1.5px solid #ddd;border-radius:10px;font-size:14px">
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:12px;color:#888;white-space:nowrap">se paga el</span>
+            <input id="gf-dia" type="number" placeholder="día" min="1" max="31" style="width:64px;padding:9px 6px;border:1.5px solid #ddd;border-radius:10px;font-size:14px;text-align:center">
+          </div>
           <button class="btn btn-green" onclick="addGastoFijo()" style="white-space:nowrap">+ Agregar</button>
+        </div>
+        <div style="font-size:11px;color:#999;margin-top:6px">
+          El día de pago es opcional, pero si lo pones el sistema te avisa cuánto necesitas juntar antes de cada vencimiento.
         </div>
       </div>
     </div>
@@ -3695,13 +3702,17 @@ function resetTodo(){
 function addGastoFijo(){
   const nombre=document.getElementById('gf-nombre').value.trim();
   const monto=parseFloat(document.getElementById('gf-monto').value);
+  const diaRaw=document.getElementById('gf-dia').value.trim();
+  const dia=diaRaw===''?null:parseInt(diaRaw);
   if(!nombre||!monto||monto<=0){toast('⚠️ Completa nombre y monto','#e67e22');return;}
+  if(dia!==null&&(isNaN(dia)||dia<1||dia>31)){toast('⚠️ El día debe estar entre 1 y 31','#e67e22');return;}
   const cfg=getConfig();
   if(!cfg.gastosFijos)cfg.gastosFijos=[];
-  cfg.gastosFijos.push({id:Date.now(),nombre,monto});
+  cfg.gastosFijos.push({id:Date.now(),nombre,monto,dia});
   setConfig(cfg);
   document.getElementById('gf-nombre').value='';
   document.getElementById('gf-monto').value='';
+  document.getElementById('gf-dia').value='';
   renderGastosFijosConfig();
   toast('✅ Gasto fijo agregado');
 }
@@ -3719,7 +3730,10 @@ function renderGastosFijosConfig(){
   const total=lista.reduce((s,g)=>s+g.monto,0);
   box.innerHTML=lista.map(g=>`
     <div class="cfg-row">
-      <span class="cfg-lbl">${g.nombre}</span>
+      <span class="cfg-lbl">${g.nombre}
+        ${g.dia?`<span style="font-size:11px;color:#888;display:block">📅 se paga el ${g.dia} de cada mes</span>`
+                :`<span style="font-size:11px;color:#c9a227;display:block">sin fecha de pago</span>`}
+      </span>
       <div style="display:flex;align-items:center;gap:10px">
         <span style="font-weight:700;color:#e05a2b">${fmt(g.monto)}</span>
         <button onclick="deleteGastoFijo(${g.id})" style="background:none;border:none;color:#e74c3c;font-size:18px;cursor:pointer;line-height:1">×</button>
@@ -3729,6 +3743,62 @@ function renderGastosFijosConfig(){
       <strong style="font-size:14px">Total mensual</strong>
       <strong style="font-size:16px;color:#e05a2b">${fmt(total)}</strong>
     </div>`;
+}
+
+// ===== PRÓXIMOS PAGOS =====
+// Un mes rentable no sirve de nada si el día que vence el alquiler no hay
+// plata en caja. Esto traduce cada vencimiento a cuánto hay que vender antes.
+function renderProximosPagos(lista,ahora,diasMes,diaActual,ritmoDiario,mcPct){
+  const conFecha=lista.filter(g=>g.dia&&g.dia>=1&&g.dia<=31);
+  if(!conFecha.length){
+    return `<div style="background:#fff8e1;border-radius:10px;padding:12px 14px;margin-top:14px;font-size:12px;color:#856404">
+      📅 Ponle fecha de pago a tus gastos fijos (en Config → Gastos fijos) y aquí te aparecerá cuánto necesitas juntar antes de cada vencimiento.
+    </div>`;
+  }
+  // Se ordenan por cercanía: lo que ya pasó este mes vence el mes siguiente
+  const items=conFecha.map(g=>{
+    const yaPaso=g.dia<diaActual;
+    const diasFalta=yaPaso?(diasMes-diaActual+g.dia):(g.dia-diaActual);
+    return {...g,yaPaso,diasFalta};
+  }).sort((a,b)=>a.diasFalta-b.diasFalta);
+
+  const proximos=items.slice(0,4);
+  const totalMes=lista.reduce((s,g)=>s+g.monto,0);
+
+  return `
+  <div style="margin-top:14px;border:1.5px solid #f0e0c0;border-radius:12px;overflow:hidden">
+    <div style="background:#fff8e1;padding:10px 14px;font-size:13px;font-weight:800;color:#856404">
+      📅 Próximos pagos — cuánto necesitas juntar
+    </div>
+    <div style="padding:12px 14px;background:#fffdf7">
+      ${proximos.map(g=>{
+        // Cuánto hay que vender para cubrir ese pago, al margen actual
+        const ventaNecesaria=(mcPct&&mcPct>0)?g.monto/mcPct:null;
+        const porDia=(ventaNecesaria&&g.diasFalta>0)?ventaNecesaria/g.diasFalta:ventaNecesaria;
+        const alcanza=(ritmoDiario&&g.diasFalta>0)?(ritmoDiario*g.diasFalta*(mcPct||0))>=g.monto:null;
+        const urgente=g.diasFalta<=3;
+        return `
+        <div style="padding:10px 0;border-bottom:1px solid #f4ece0">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+            <div>
+              <strong style="font-size:14px">${g.nombre}</strong>
+              <div style="font-size:11px;color:${urgente?'#B3261E':'#888'};font-weight:${urgente?'700':'400'}">
+                ${g.diasFalta===0?'⚠️ VENCE HOY':g.diasFalta===1?'⚠️ mañana':'en '+g.diasFalta+' días'} · día ${g.dia}${g.yaPaso?' del próximo mes':''}
+              </div>
+            </div>
+            <strong style="font-size:16px;color:#F57C00;white-space:nowrap">${fmt(g.monto)}</strong>
+          </div>
+          ${ventaNecesaria?`<div style="font-size:11px;color:#666;margin-top:5px">
+            Para cubrirlo tienes que vender <strong>${fmt(ventaNecesaria)}</strong>${g.diasFalta>0?` — ${fmt(porDia)}/día`:''}
+            ${alcanza===true?' <span style="color:#1B5E35;font-weight:700">✓ vas bien</span>':alcanza===false?' <span style="color:#B3261E;font-weight:700">✗ no alcanzas al ritmo actual</span>':''}
+          </div>`:''}
+        </div>`;
+      }).join('')}
+      <div style="display:flex;justify-content:space-between;padding-top:10px;font-size:12px;color:#666">
+        <span>Total de compromisos del mes</span><strong>${fmt(totalMes)}</strong>
+      </div>
+    </div>
+  </div>`;
 }
 
 // ===== META MENSUAL EN DASHBOARD =====
@@ -3881,9 +3951,13 @@ function renderMetaMensual(){
       </div>`).join('')}
     </div>`:''}
 
+    ${renderProximosPagos(lista,ahora,diasMes,diaActual,ritmoDiario,mcPct)}
+
     <div style="margin-top:14px">
       <div style="font-size:12px;font-weight:700;color:#888;margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px">Desglose de gastos fijos</div>
-      ${lista.map(g=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #EEF0F3;font-size:13px"><span>${g.nombre}</span><span style="font-weight:600;color:#F57C00">${fmt(g.monto)}</span></div>`).join('')}
+      ${lista.map(g=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #EEF0F3;font-size:13px">
+        <span>${g.nombre}${g.dia?`<span style="color:#999;font-size:11px"> · día ${g.dia}</span>`:''}</span>
+        <span style="font-weight:600;color:#F57C00">${fmt(g.monto)}</span></div>`).join('')}
     </div>`;
 }
 
@@ -3892,7 +3966,7 @@ function renderMetaMensual(){
 // Negocio ficticio. Ningún dato aquí es real.
 // Para reiniciar todo: botón "Reiniciar demo" o borrar el localStorage.
 // ===================================================================
-const DEMO_SEED_VERSION=4;
+const DEMO_SEED_VERSION=5;
 
 // --- Insumos: [nombre, unidad, cantidad, mínimo, costo total del lote] ---
 const DEMO_STOCK=[
@@ -4014,10 +4088,10 @@ function sembrarDemo(forzar){
     pinCajera:'1234', pinDueno:'4321', numMesas:6,
     estimados:{}, vidasUtil:{'Masa de empanada':5,'Carne molida':3,'Pollo deshilachado':3,'Lomo de res':3,'Queso':15,'Jamón':10,'Champiñones':4},
     gastosFijos:[
-      {id:1,nombre:'Alquiler del local',monto:900},
-      {id:2,nombre:'Luz y agua',monto:220},
-      {id:3,nombre:'Internet',monto:80},
-      {id:4,nombre:'Sueldo ayudante',monto:1100}
+      {id:1,nombre:'Alquiler del local',monto:900,dia:5},
+      {id:2,nombre:'Luz y agua',monto:220,dia:12},
+      {id:3,nombre:'Internet',monto:80,dia:18},
+      {id:4,nombre:'Sueldo ayudante',monto:1100,dia:30}
     ]
   }));
 
