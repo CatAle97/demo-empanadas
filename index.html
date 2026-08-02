@@ -1070,6 +1070,10 @@ input.err,select.err{border-color:#e74c3c!important;}
       <div style="font-size:11px;color:#999;margin-top:3px">Escribe en la medida que uses. Ejemplo: <strong>200 gr</strong> de carne por empanada.</div>
     </div>
 
+    <!-- Pegado a los campos: se cargan varios insumos seguidos sin bajar la pantalla -->
+    <button class="btn btn-green btn-full" id="ri-add-btn" onclick="addIngReceta(true)"
+      style="min-height:56px;font-size:16px;margin-bottom:18px">➕ Agregar insumo</button>
+
     <div class="form-group">
       <label>¿Se gasta cuando la venta es...?</label>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -1082,14 +1086,9 @@ input.err,select.err{border-color:#e74c3c!important;}
       </div>
     </div>
 
-    <!-- El botón vive aquí arriba, pegado a los campos: se agregan varios
-         insumos seguidos sin tener que bajar la pantalla cada vez. -->
-    <button class="btn btn-green btn-full" id="ri-add-btn" onclick="addIngReceta(true)"
-      style="min-height:56px;font-size:16px">➕ Agregar a la receta</button>
-
     <div id="mi-lista" style="margin-top:16px"></div>
 
-    <button class="btn btn-gray btn-full" onclick="cerrarModalIng()" style="margin-top:14px;min-height:52px">Terminar</button>
+    <button class="btn btn-gray btn-full" onclick="cerrarModalIng()" style="margin-top:14px;min-height:52px">Finalizar</button>
   </div>
 </div>
 
@@ -3197,7 +3196,7 @@ function prefillIngReceta(){
     selU.value=unidadPreferida(unitBase);
     document.getElementById('ri-qty').value=selU.value===unitBase?'1':'100';
     setRiTipos(['local','llevar','delivery']);
-    if(btn)btn.textContent='➕ Agregar a la receta';
+    if(btn)btn.textContent='➕ Agregar insumo';
   }
   actualizarEquivalencia();
 }
