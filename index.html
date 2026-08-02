@@ -665,7 +665,7 @@ input.err,select.err{border-color:#e74c3c!important;}
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
             <input id="np-nombre" type="text" placeholder="Nombre del producto" style="flex:2;min-width:160px;padding:9px 10px;border:1.5px solid #ddd;border-radius:10px;font-size:14px">
             <select id="np-cat" onchange="toggleNpCatOtra()" style="flex:1;min-width:130px;padding:9px 10px;border:1.5px solid #ddd;border-radius:10px;font-size:14px"></select>
-            <input id="np-precio" type="number" placeholder="Precio (opcional)" min="0" step="0.5" style="width:130px;padding:9px 8px;border:1.5px solid #ddd;border-radius:10px;font-size:14px;text-align:center">
+            <input id="np-precio" type="number" placeholder="Precio S/" min="0" step="0.5" style="width:110px;padding:9px 8px;border:1.5px solid #ddd;border-radius:10px;font-size:14px;text-align:center">
           </div>
           <input id="np-cat-otra" type="text" placeholder="Nombre de la nueva categoría" style="display:none;width:100%;padding:9px 10px;border:1.5px solid #ddd;border-radius:10px;font-size:14px;margin-bottom:8px;box-sizing:border-box">
           <div style="display:flex;gap:8px;align-items:center">
@@ -3209,7 +3209,7 @@ function renderListaIngModal(prod){
     <div style="font-size:11px;font-weight:800;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">
       Ya lleva ${ings.length} insumo${ings.length>1?'s':''}
     </div>
-    <div style="max-height:150px;overflow-y:auto;background:#fafafa;border-radius:8px;padding:8px">
+    <div style="max-height:260px;overflow-y:auto;background:#fafafa;border-radius:8px;padding:8px">
     ${ings.map(i=>{
       const t=(i.tipos&&i.tipos.length)?i.tipos:['local','llevar','delivery'];
       const solo=t.length<3?' · solo '+t.map(x=>et[x]).join('/'):'';
@@ -3737,7 +3737,13 @@ function renderMetaMensual(){
 
   // --- Punto de equilibrio: venta necesaria para no perder plata ---
   const equilibrio=(mcPct&&mcPct>0)?totalFijos/mcPct:null;
-  const utilidad=ventasMesReal-costoVariable-totalFijos;
+  // El resultado se mide contra los gastos fijos que ya corrieron, no contra
+  // el mes entero: al dia 2 de 31 solo se ha "consumido" 2/31 del alquiler.
+  // Medirlo de otro modo marca perdida todos los meses hasta fin de mes.
+  const avanceMes=Math.min(1,diasTranscurridos/diasMes);
+  const fijosCorridos=totalFijos*avanceMes;
+  const utilidad=ventasMesReal-costoVariable-fijosCorridos;
+  const utilidadMesCompleto=ventasMesReal-costoVariable-totalFijos;
   const faltaVender=equilibrio?Math.max(0,equilibrio-ventasMesReal):null;
   const ticket=unidadesVendidas>0?ventasMesReal/unidadesVendidas:0;
   const pct=equilibrio?Math.min(100,Math.round(ventasMesReal/equilibrio*100)):0;
@@ -3784,12 +3790,14 @@ function renderMetaMensual(){
     <div style="background:${utilidad>=0?'#E3F2E7':'#FDECEA'};border-radius:10px;padding:12px 14px;margin-bottom:12px">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <span style="font-size:13px;font-weight:700;color:${utilidad>=0?'#1B5E35':'#B3261E'}">
-          ${utilidad>=0?'✅ Ganancia real del mes':'🔴 Pérdida real del mes'}
+          ${utilidad>=0?'✅ Vas ganando':'🔴 Vas perdiendo'}
+          <span style="font-weight:500;color:#666"> — día ${diaActual} de ${diasMes}</span>
         </span>
         <strong style="font-size:20px;color:${utilidad>=0?'#1B5E35':'#B3261E'}">${fmt(Math.abs(utilidad))}</strong>
       </div>
       <div style="font-size:11px;color:#666;margin-top:6px">
-        Ventas ${fmt(ventasMesReal)} − insumos ${fmt(costoVariable)} − gastos fijos ${fmt(totalFijos)}
+        Ventas ${fmt(ventasMesReal)} − insumos ${fmt(costoVariable)} − gastos fijos corridos ${fmt(fijosCorridos)}
+        <span style="color:#999">(${(avanceMes*100).toFixed(0)}% del mes)</span>
       </div>
     </div>
 
@@ -3828,7 +3836,7 @@ function renderMetaMensual(){
 // Negocio ficticio. Ningún dato aquí es real.
 // Para reiniciar todo: botón "Reiniciar demo" o borrar el localStorage.
 // ===================================================================
-const DEMO_SEED_VERSION=2;
+const DEMO_SEED_VERSION=4;
 
 // --- Insumos: [nombre, unidad, cantidad, mínimo, costo total del lote] ---
 const DEMO_STOCK=[
@@ -3888,7 +3896,7 @@ const _i=(nombre,qty,unit,tipos)=>({nombre,qty,unit,tipos:tipos||_T});
 const _emp=()=>[_i('Servilleta',1,'unid'),_i('Bolsa de papel',1,'unid',_LL),_i('Etiqueta',1,'unid',_LL)];
 
 const DEMO_RECETAS={
-  'Empanada de Carne':[_i('Masa de empanada',1,'unid'),_i('Carne molida',0.05,'kg'),_i('Cebolla',0.03,'kg'),_i('Aceituna',0.003,'kg'),_i('Huevo',0.15,'unid'),..._emp()],
+  'Empanada de Carne':[_i('Masa de empanada',1,'unid'),_i('Carne molida',0.05,'kg'),_i('Cebolla',0.03,'kg'),_i('Aceituna',0.003,'kg'),..._emp()],
   'Empanada de Pollo':[_i('Masa de empanada',1,'unid'),_i('Pollo deshilachado',0.05,'kg'),_i('Cebolla',0.03,'kg'),_i('Ají amarillo',0.01,'kg'),..._emp()],
   'Empanada de Queso':[_i('Masa de empanada',1,'unid'),_i('Queso',0.045,'kg'),..._emp()],
   'Empanada de Jamón y Queso':[_i('Masa de empanada',1,'unid'),_i('Queso',0.035,'kg'),_i('Jamón',0.025,'kg'),..._emp()],
@@ -3896,7 +3904,7 @@ const DEMO_RECETAS={
   'Empanada de Lomo Saltado':[_i('Masa de empanada',1,'unid'),_i('Lomo de res',0.06,'kg'),_i('Cebolla',0.04,'kg'),_i('Tomate',0.03,'kg'),_i('Papa',0.05,'kg'),..._emp()],
   'Empanada de Ají de Gallina':[_i('Masa de empanada',1,'unid'),_i('Pollo deshilachado',0.045,'kg'),_i('Ají amarillo',0.02,'kg'),_i('Papa',0.03,'kg'),_i('Aceituna',0.003,'kg'),..._emp()],
   'Empanada de Pollo con Champiñones':[_i('Masa de empanada',1,'unid'),_i('Pollo deshilachado',0.045,'kg'),_i('Champiñones',0.03,'kg'),_i('Cebolla',0.02,'kg'),..._emp()],
-  'Empanada Criolla':[_i('Masa de empanada',1,'unid'),_i('Carne molida',0.045,'kg'),_i('Cebolla',0.04,'kg'),_i('Pasas',0.01,'kg'),_i('Aceituna',0.003,'kg'),_i('Huevo',0.15,'unid'),..._emp()],
+  'Empanada Criolla':[_i('Masa de empanada',1,'unid'),_i('Carne molida',0.045,'kg'),_i('Cebolla',0.04,'kg'),_i('Pasas',0.01,'kg'),_i('Aceituna',0.003,'kg'),..._emp()],
   'Empanada Cuatro Quesos':[_i('Masa de empanada',1,'unid'),_i('Queso',0.06,'kg'),..._emp()],
   'Empanada de Manjar':[_i('Masa de empanada',1,'unid'),_i('Manjar blanco',0.04,'kg'),_i('Azúcar',0.005,'kg'),..._emp()],
   'Empanada de Chocolate':[_i('Masa de empanada',1,'unid'),_i('Chocolate',0.03,'kg'),..._emp()],
@@ -3968,23 +3976,59 @@ function sembrarDemo(forzar){
   const hoy=_fechaHace(0);
   const etiquetaHoy=new Date().toLocaleDateString('es-PE',{timeZone:TZ_PERU,day:'2-digit',month:'2-digit',year:'numeric'});
   let oid=Date.now()-900000;
-  const horas=['09:12 a. m.','10:03 a. m.','10:47 a. m.','11:20 a. m.','11:58 a. m.','12:31 p. m.','01:05 p. m.','01:40 p. m.','02:15 p. m.'];
-  const orders=DEMO_VENTAS.map(([client,prod,qty,type,metodoPago],ix)=>{
-    const p=productos.find(x=>x.nombre===prod);
-    const precio=p?p.precio:5;
-    const deliveryCost=type==='delivery'?1:0;
-    const items=[];
-    for(let k=0;k<qty;k++)items.push({name:prod,price:precio,basePrice:precio,cremas:[],sinCremas:false,adicionales:[],ensalada:null,papas:null,nota:''});
-    const hora=horas[ix]||'02:00 p. m.';
-    return {
-      id:oid+ix*1000, orderNum:ix+1, date:hoy, time:hora, dateLabel:etiquetaHoy,
-      client, type, mesa:type==='local'?((ix%6)+1):null,
-      address:type==='delivery'?'Av. Los Álamos 234':'', deliveryCost,
-      items, total:precio*qty+deliveryCost,
-      status:'entregado', statusTimes:{pendiente:hora,en_cocina:hora,listo:hora,entregado:hora},
-      pagoTipo:'pagoya', metodoPago, pagado:true, fiadoFecha:null
-    };
-  });
+  const ahoraSeed=new Date();
+  const diaActualSeed=ahoraSeed.getDate();
+  // Ventas de todos los días corridos del mes, no solo de hoy: sin historia
+  // el sistema no puede calcular ritmo, margen real ni punto de equilibrio.
+  const CLIENTES=['Lucía Ramos','Marco Salas','Carmen Díaz','Diego Paredes','Rosa Quispe',
+    'Julio Mendoza','Ana Torres','Pedro Chávez','Sofía Vargas','Elena Ríos','Óscar Núñez',
+    'Miriam Castro','Raúl Bravo','Nora Silva','Iván Ponce','Teresa Loayza'];
+  const CATALOGO_VENTA=productos.filter(p=>DEMO_RECETAS[p.nombre]);
+  const PESOS=[8,7,6,5,4,3,3,3,2,2,2,2,1,1,1];   // los clásicos se venden más
+  const TIPOS=[['local',4],['llevar',5],['delivery',2]];
+  const PAGOS=[['efectivo',5],['yape',4],['plin',2]];
+  const elegir=(lista,pesos,r)=>{
+    const tot=pesos.reduce((a,b)=>a+b,0);
+    let x=r*tot;
+    for(let i=0;i<lista.length;i++){x-=pesos[i];if(x<=0)return lista[i];}
+    return lista[lista.length-1];
+  };
+  // Aleatorio reproducible: el demo se ve igual cada vez que se reinicia
+  let semilla=20260802;
+  const rnd=()=>{semilla=(semilla*1103515245+12345)&0x7fffffff;return semilla/0x7fffffff;};
+
+  const orders=[];
+  let num=0;
+  for(let dia=1;dia<=diaActualSeed;dia++){
+    const fecha=`${ahoraSeed.getFullYear()}-${ahoraSeed.getMonth()+1}-${dia}`;
+    const etiqueta=`${String(dia).padStart(2,'0')}/${String(ahoraSeed.getMonth()+1).padStart(2,'0')}/${ahoraSeed.getFullYear()}`;
+    const finde=new Date(ahoraSeed.getFullYear(),ahoraSeed.getMonth(),dia).getDay();
+    const esFinde=(finde===0||finde===6);
+    const pedidosDia=Math.round((esFinde?26:18)+rnd()*6);   // fin de semana vende más
+    for(let k=0;k<pedidosDia;k++){
+      num++;
+      const prodObj=elegir(CATALOGO_VENTA,PESOS.slice(0,CATALOGO_VENTA.length),rnd());
+      const cant=1+Math.floor(rnd()*3);
+      const tipo=elegir(TIPOS.map(t=>t[0]),TIPOS.map(t=>t[1]),rnd());
+      const pago=elegir(PAGOS.map(p=>p[0]),PAGOS.map(p=>p[1]),rnd());
+      const cliente=CLIENTES[Math.floor(rnd()*CLIENTES.length)];
+      const hh=10+Math.floor(rnd()*11);
+      const mm=Math.floor(rnd()*60);
+      const hora=`${String(hh>12?hh-12:hh).padStart(2,'0')}:${String(mm).padStart(2,'0')} ${hh>=12?'p. m.':'a. m.'}`;
+      const deliveryCost=tipo==='delivery'?1:0;
+      const items=[];
+      for(let j=0;j<cant;j++)items.push({name:prodObj.nombre,price:prodObj.precio,basePrice:prodObj.precio,
+        cremas:[],sinCremas:false,adicionales:[],ensalada:null,papas:null,nota:''});
+      orders.push({
+        id:oid+num*137, orderNum:num, date:fecha, time:hora, dateLabel:etiqueta,
+        client:cliente, type:tipo, mesa:tipo==='local'?((num%6)+1):null,
+        address:tipo==='delivery'?'Av. Los Álamos 234':'', deliveryCost,
+        items, total:+(prodObj.precio*cant+deliveryCost).toFixed(2),
+        status:'entregado', statusTimes:{pendiente:hora,en_cocina:hora,listo:hora,entregado:hora},
+        pagoTipo:'pagoya', metodoPago:pago, pagado:true, fiadoFecha:null
+      });
+    }
+  }
   localStorage.setItem(K.orders,JSON.stringify(orders));
 
   // Un fiado pendiente (para que la pantalla no salga vacía)
@@ -3995,8 +4039,10 @@ function sembrarDemo(forzar){
 
   // Gastos del día
   localStorage.setItem(K.expenses,JSON.stringify([
-    {id:oid+60001,date:hoy,dateLabel:etiquetaHoy,time:'07:50 a. m.',concepto:'Carne molida 5kg',monto:110,categoria:'Insumos'},
-    {id:oid+60002,date:hoy,dateLabel:etiquetaHoy,time:'08:05 a. m.',concepto:'Cajas y bolsas',monto:63,categoria:'Empaques'}
+    {id:oid+60001,date:hoy,time:'07:50 a. m.',cat:'Ingredientes',desc:'Carne molida (5 kg)',amount:110},
+    {id:oid+60002,date:hoy,time:'08:05 a. m.',cat:'Otro',desc:'Cajas y bolsas',amount:63},
+    {id:oid+60003,date:_fechaHace(1),time:'08:10 a. m.',cat:'Ingredientes',desc:'Harina y manteca',amount:95},
+    {id:oid+60004,date:_fechaHace(1),time:'05:30 p. m.',cat:'Otro',desc:'Balón de gas',amount:69}
   ]));
 
   localStorage.setItem(K.losses,JSON.stringify([]));
