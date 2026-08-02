@@ -241,8 +241,20 @@ input.err,select.err{border-color:#e74c3c!important;}
 #toast.show{opacity:1;}
 
 /* CONFIG ACORDEÓN */
-.acrd-item{background:white;border:1.5px solid #e8e0d8;border-radius:14px;margin-bottom:8px;overflow:hidden;}
-.acrd-hdr{display:flex;justify-content:space-between;align-items:center;padding:15px 16px;font-size:15px;font-weight:700;color:#8a4a20;cursor:pointer;user-select:none;}
+/* Configuracion en tarjetas, como los productos del mostrador.
+   Al abrir una, ocupa el ancho completo y su encabezado vuelve a fila. */
+.cfg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;align-items:start;}
+@media(max-width:420px){.cfg-grid{grid-template-columns:repeat(2,1fr);}}
+.acrd-item{background:white;border:1.5px solid #e8e0d8;border-radius:14px;overflow:hidden;transition:box-shadow .15s,transform .15s;}
+.acrd-item:not(.open):active{transform:scale(.97);}
+.acrd-item.open{grid-column:1/-1;box-shadow:0 4px 14px rgba(0,0,0,.10);}
+.acrd-hdr{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;text-align:center;min-height:104px;padding:14px 8px;font-size:15px;font-weight:700;color:#8a4a20;cursor:pointer;user-select:none;}
+.acrd-ico{font-size:28px;line-height:1;}
+.acrd-txt{font-size:13px;line-height:1.25;}
+.acrd-item:not(.open) .acrd-arrow{display:none;}
+.acrd-item.open .acrd-hdr{flex-direction:row;justify-content:space-between;text-align:left;min-height:58px;padding:0 18px;gap:10px;}
+.acrd-item.open .acrd-ico{font-size:20px;}
+.acrd-item.open .acrd-txt{flex:1;font-size:16px;}
 .acrd-hdr:active{background:#f5f5f5;}
 .acrd-arrow{font-size:12px;color:#aaa;transition:transform .2s;}
 .acrd-arrow.open{transform:rotate(180deg);}
@@ -615,30 +627,11 @@ input.err,select.err{border-color:#e74c3c!important;}
   <!-- ===== CONFIG (dueño) ===== -->
   <div class="sec" id="s-config">
 
-    <div class="acrd-item" id="acrd-pins">
-      <div class="acrd-hdr" onclick="toggleAcrd('pins')">
-        <span>🔐 PINs de acceso</span><span class="acrd-arrow">▼</span>
-      </div>
-      <div class="acrd-body" style="display:none">
-        <div class="flex-row">
-          <div class="form-group"><label>PIN Cajera</label><input id="cfg-pin-cajera" type="password" maxlength="6" placeholder="••••"></div>
-          <div class="form-group"><label>PIN Dueño</label><input id="cfg-pin-dueno" type="password" maxlength="6" placeholder="••••"></div>
-        </div>
-        <div class="form-group" style="margin-top:4px">
-          <label>PIN Compras (quien va al mercado)</label>
-          <input id="cfg-pin-bob" type="password" maxlength="6" placeholder="••••" style="max-width:160px">
-        </div>
-        <div class="form-group" style="margin-top:4px">
-          <label>PIN Mozo (pedidos de mesa)</label>
-          <input id="cfg-pin-mozo" type="password" maxlength="6" placeholder="••••" style="max-width:160px">
-        </div>
-        <button class="btn btn-green btn-sm" onclick="savePins()">Guardar PINs</button>
-      </div>
-    </div>
+    <div class="cfg-grid">
 
     <div class="acrd-item" id="acrd-mesas">
       <div class="acrd-hdr" onclick="toggleAcrd('mesas')">
-        <span>🪑 Mesas del local</span><span class="acrd-arrow">▼</span>
+        <span class="acrd-ico">🪑</span><span class="acrd-txt">Mesas del local</span><span class="acrd-arrow">▼</span>
       </div>
       <div class="acrd-body" style="display:none">
         <div class="cfg-row">
@@ -654,7 +647,7 @@ input.err,select.err{border-color:#e74c3c!important;}
 
     <div class="acrd-item" id="acrd-recetas">
       <div class="acrd-hdr" onclick="toggleAcrd('recetas')">
-        <span>🍳 Recetas de productos</span><span class="acrd-arrow">▼</span>
+        <span class="acrd-ico">🍳</span><span class="acrd-txt">Recetas de productos</span><span class="acrd-arrow">▼</span>
       </div>
       <div class="acrd-body" style="display:none">
         <p style="font-size:12px;color:#888;margin-bottom:12px">Qué insumos consume cada producto al venderse. Se descuenta del stock automáticamente.</p>
@@ -683,7 +676,7 @@ input.err,select.err{border-color:#e74c3c!important;}
 
     <div class="acrd-item" id="acrd-gastos">
       <div class="acrd-hdr" onclick="toggleAcrd('gastos')">
-        <span>💸 Gastos fijos mensuales</span><span class="acrd-arrow">▼</span>
+        <span class="acrd-ico">💸</span><span class="acrd-txt">Gastos fijos mensuales</span><span class="acrd-arrow">▼</span>
       </div>
       <div class="acrd-body" style="display:none">
         <p style="font-size:12px;color:#888;margin-bottom:12px">Alquiler, luz, gas, personal, etc.</p>
@@ -698,7 +691,7 @@ input.err,select.err{border-color:#e74c3c!important;}
 
     <div class="acrd-item" id="acrd-estimados">
       <div class="acrd-hdr" onclick="toggleAcrd('estimados')">
-        <span>📅 Estimado de ventas diarias</span><span class="acrd-arrow">▼</span>
+        <span class="acrd-ico">📅</span><span class="acrd-txt">Estimado de ventas diarias</span><span class="acrd-arrow">▼</span>
       </div>
       <div class="acrd-body" style="display:none">
         <p style="font-size:12px;color:#888;margin-bottom:12px">Cuántas unidades vendes por día. Sirve para generar la lista de compras.</p>
@@ -709,7 +702,7 @@ input.err,select.err{border-color:#e74c3c!important;}
 
     <div class="acrd-item" id="acrd-vidas">
       <div class="acrd-hdr" onclick="toggleAcrd('vidas')">
-        <span>⏱️ Vida útil de insumos</span><span class="acrd-arrow">▼</span>
+        <span class="acrd-ico">⏱️</span><span class="acrd-txt">Vida útil de insumos</span><span class="acrd-arrow">▼</span>
       </div>
       <div class="acrd-body" style="display:none">
         <p style="font-size:12px;color:#888;margin-bottom:12px">Días que dura cada insumo antes de vencer.</p>
@@ -720,7 +713,7 @@ input.err,select.err{border-color:#e74c3c!important;}
 
     <div class="acrd-item" id="acrd-respaldo">
       <div class="acrd-hdr" onclick="toggleAcrd('respaldo')">
-        <span>💾 Respaldo de datos</span><span class="acrd-arrow">▼</span>
+        <span class="acrd-ico">💾</span><span class="acrd-txt">Respaldo de datos</span><span class="acrd-arrow">▼</span>
       </div>
       <div class="acrd-body" style="display:none">
         <p style="font-size:12px;color:#888;margin-bottom:12px">Descarga una copia de todo el sistema: ventas, caja, fiados, stock y configuración. Guárdala seguido. Si algo se borra por error, con "Restaurar" se recupera todo.</p>
@@ -732,7 +725,7 @@ input.err,select.err{border-color:#e74c3c!important;}
 
     <div class="acrd-item" style="border-color:#ffe0b2" id="acrd-demo">
       <div class="acrd-hdr" style="color:#8a4a20" onclick="toggleAcrd('demo')">
-        <span>🔄 Reiniciar demostración</span><span class="acrd-arrow">▼</span>
+        <span class="acrd-ico">🔄</span><span class="acrd-txt">Reiniciar demostración</span><span class="acrd-arrow">▼</span>
       </div>
       <div class="acrd-body" style="display:none">
         <p style="font-size:13px;color:#888;margin-bottom:14px">Devuelve el sistema a los datos de ejemplo originales: stock lleno, ventas del día y recetas. Úsalo antes de cada demostración.</p>
@@ -742,12 +735,35 @@ input.err,select.err{border-color:#e74c3c!important;}
 
     <div class="acrd-item" style="border-color:#fde8e8" id="acrd-reset">
       <div class="acrd-hdr" style="color:#c0392b" onclick="toggleAcrd('reset')">
-        <span>🗑️ Borrar todos los datos</span><span class="acrd-arrow">▼</span>
+        <span class="acrd-ico">🗑️</span><span class="acrd-txt">Borrar todos los datos</span><span class="acrd-arrow">▼</span>
       </div>
       <div class="acrd-body" style="display:none">
         <p style="font-size:13px;color:#888;margin-bottom:14px">Deja el sistema completamente vacío, como arrancaría un negocio nuevo.</p>
         <button class="btn btn-danger btn-full" onclick="resetTodo()">Borrar todos los datos del sistema</button>
       </div>
+    </div>
+
+    <div class="acrd-item" id="acrd-pins">
+      <div class="acrd-hdr" onclick="toggleAcrd('pins')">
+        <span class="acrd-ico">🔐</span><span class="acrd-txt">PINs de acceso</span><span class="acrd-arrow">▼</span>
+      </div>
+      <div class="acrd-body" style="display:none">
+        <div class="flex-row">
+          <div class="form-group"><label>PIN Cajera</label><input id="cfg-pin-cajera" type="password" maxlength="6" placeholder="••••"></div>
+          <div class="form-group"><label>PIN Dueño</label><input id="cfg-pin-dueno" type="password" maxlength="6" placeholder="••••"></div>
+        </div>
+        <div class="form-group" style="margin-top:4px">
+          <label>PIN Compras (quien va al mercado)</label>
+          <input id="cfg-pin-bob" type="password" maxlength="6" placeholder="••••" style="max-width:160px">
+        </div>
+        <div class="form-group" style="margin-top:4px">
+          <label>PIN Mozo (pedidos de mesa)</label>
+          <input id="cfg-pin-mozo" type="password" maxlength="6" placeholder="••••" style="max-width:160px">
+        </div>
+        <button class="btn btn-green btn-sm" onclick="savePins()">Guardar PINs</button>
+      </div>
+    </div>
+
     </div>
 
   </div>
@@ -2688,6 +2704,7 @@ function toggleAcrd(id){
   const arrow=item.querySelector('.acrd-arrow');
   const open=body.style.display==='none';
   body.style.display=open?'block':'none';
+  item.classList.toggle('open',open);
   if(arrow)arrow.classList.toggle('open',open);
   if(open){
     if(id==='recetas')renderRecetas();
