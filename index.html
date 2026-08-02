@@ -1048,6 +1048,46 @@ input.err,select.err{border-color:#e74c3c!important;}
   </div>
 </div>
 
+<!-- MODAL: Insumo de receta -->
+<div class="overlay" id="modal-ing">
+  <div class="modal" style="max-width:400px">
+    <button class="modal-close" onclick="cerrarModalIng()">×</button>
+    <h3 id="mi-title">Agregar insumo</h3>
+    <div style="font-size:12px;color:#888;margin:-8px 0 14px" id="mi-sub"></div>
+
+    <div class="form-group">
+      <label>Insumo del stock</label>
+      <select id="ri-insumo-sel" onchange="prefillIngReceta()"></select>
+    </div>
+
+    <div class="form-group">
+      <label>¿Cuánto se usa por unidad?</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="ri-qty" type="number" min="0.001" step="0.001" value="1" style="flex:1">
+        <span id="mi-unit" style="font-size:14px;font-weight:700;color:#666;min-width:44px"></span>
+      </div>
+      <div style="font-size:11px;color:#999;margin-top:5px">Ejemplo: 0.08 kg de carne por empanada</div>
+    </div>
+
+    <div class="form-group">
+      <label>¿Se gasta cuando la venta es...?</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button type="button" class="type-btn on" id="ri-tipo-local" onclick="toggleRiTipo('local')">🍽️ Mesa</button>
+        <button type="button" class="type-btn on" id="ri-tipo-llevar" onclick="toggleRiTipo('llevar')">🥡 Llevar</button>
+        <button type="button" class="type-btn on" id="ri-tipo-delivery" onclick="toggleRiTipo('delivery')">🛵 Delivery</button>
+      </div>
+      <div style="font-size:11px;color:#999;margin-top:6px">
+        Apaga <strong>Mesa</strong> en cajas, bolsas y etiquetas: solo se gastan si el pedido sale del local.
+      </div>
+    </div>
+
+    <div class="modal-btns">
+      <button class="btn btn-green" id="ri-add-btn" onclick="addIngReceta()">Guardar</button>
+      <button class="btn btn-gray" onclick="cerrarModalIng()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ===== MODO DEMO — 100% LOCAL =====
 // Esta version NO se conecta a ninguna base de datos. Todo vive en el navegador
@@ -2795,9 +2835,6 @@ function renderRecetaDetalle(){
   const recetas=getObj(K.recetas,{});
   const ings=recetas[prod]||[];
   const stocks=get(K.stocks);
-  const stockOpts=stocks.length
-    ?stocks.map(s=>`<option value="${s.name.replace(/"/g,'&quot;')}">${s.name} (${s.qty} ${s.unit})</option>`).join('')
-    :'<option value="">— Sin insumos en stock —</option>';
   const precio=precioProducto(prod);
   const{total:costo,sinCosto}=costoReceta(prod);
   const margen=precio-costo;
@@ -2836,22 +2873,7 @@ function renderRecetaDetalle(){
         :'<div style="font-size:13px;color:#aaa;padding:4px 0 8px">Sin insumos definidos todavía</div>'}
     </div>
     <div style="border-top:1px solid #eee;padding-top:12px">
-      <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:8px">Agregar o editar insumo de la receta</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-        <select id="ri-insumo-sel" onchange="prefillIngReceta()" style="flex:2;min-width:160px;padding:9px 10px;border:1.5px solid #ddd;border-radius:10px;font-size:14px">
-          <option value="">— Selecciona insumo —</option>
-          ${stockOpts}
-        </select>
-        <input id="ri-qty" type="number" placeholder="Cant." min="0.01" step="0.01" value="1"
-          style="width:72px;padding:9px 8px;border:1.5px solid #ddd;border-radius:10px;font-size:14px;text-align:center">
-      </div>
-      <div style="font-size:11px;color:#888;margin-bottom:6px">¿Se gasta cuando la venta es...?</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
-        <button type="button" class="type-btn on" id="ri-tipo-local" onclick="toggleRiTipo('local')">🍽️ Mesa</button>
-        <button type="button" class="type-btn on" id="ri-tipo-llevar" onclick="toggleRiTipo('llevar')">🥡 Llevar</button>
-        <button type="button" class="type-btn on" id="ri-tipo-delivery" onclick="toggleRiTipo('delivery')">🛵 Delivery</button>
-      </div>
-      <button class="btn btn-green" id="ri-add-btn" onclick="addIngReceta()">+ Agregar</button>
+      <button class="btn btn-green btn-full" onclick="abrirModalIng('${prod.replace(/'/g,"\\'")}')" ${!stocks.length?'disabled style="opacity:.5"':''}>+ Agregar insumo a esta receta</button>
       ${!stocks.length?'<p style="font-size:12px;color:#e67e22;margin-top:8px">⚠️ Primero agrega insumos al Stock para poder usarlos en recetas.</p>':''}
     </div>`;
 }
@@ -2868,10 +2890,28 @@ function toggleRiTipo(t){
   if(btn.classList.contains('on')&&activos.length===1)return;
   btn.classList.toggle('on');
 }
+// ===== MODAL DE INSUMO DE RECETA =====
+function abrirModalIng(prod,nombre){
+  const sel=document.getElementById('ri-insumo-sel');
+  const stocks=get(K.stocks);
+  if(!stocks.length){toast('⚠️ Primero agrega insumos al Stock','#e67e22');return;}
+  sel.innerHTML='<option value="">— Selecciona insumo —</option>'+
+    stocks.map(s=>`<option value="${s.name.replace(/"/g,'&quot;')}">${s.name} (quedan ${s.qty} ${s.unit})</option>`).join('');
+  document.getElementById('mi-title').textContent=nombre?'Editar insumo':'Agregar insumo';
+  document.getElementById('mi-sub').textContent='Receta de: '+prod;
+  if(nombre)sel.value=nombre;
+  else sel.value='';
+  prefillIngReceta();
+  document.getElementById('modal-ing').classList.add('show');
+}
+function cerrarModalIng(){document.getElementById('modal-ing').classList.remove('show');}
 function prefillIngReceta(){
   const prod=document.getElementById('receta-prod-sel').value;
   const nombre=document.getElementById('ri-insumo-sel').value;
   const btn=document.getElementById('ri-add-btn');
+  const st=get(K.stocks).find(s=>s.name===nombre);
+  const unitLbl=document.getElementById('mi-unit');
+  if(unitLbl)unitLbl.textContent=st?st.unit:'';
   const ing=prod&&nombre?(getObj(K.recetas,{})[prod]||[]).find(i=>i.nombre===nombre):null;
   if(ing){
     document.getElementById('ri-qty').value=ing.qty;
@@ -2880,15 +2920,11 @@ function prefillIngReceta(){
   }else{
     document.getElementById('ri-qty').value='1';
     setRiTipos(['local','llevar','delivery']);
-    if(btn)btn.textContent='+ Agregar';
+    if(btn)btn.textContent='Guardar';
   }
 }
 function editIngReceta(prod,nombre){
-  const sel=document.getElementById('ri-insumo-sel');
-  if(!sel)return;
-  sel.value=nombre;
-  prefillIngReceta();
-  sel.scrollIntoView({behavior:'smooth',block:'center'});
+  abrirModalIng(prod,nombre);
 }
 function addIngReceta(){
   const prod=document.getElementById('receta-prod-sel').value;
@@ -2904,8 +2940,11 @@ function addIngReceta(){
   recetas[prod]=recetas[prod].filter(i=>i.nombre!==nombre);
   recetas[prod].push({nombre,qty,unit:st?st.unit:'und',tipos:tipos.length?tipos:['local','llevar','delivery']});
   setObj(K.recetas,recetas);
+  cerrarModalIng();
   renderRecetas();
-  toast((esNuevo?'✅ ':'💾 ')+nombre+(esNuevo?' agregado a la receta de '+prod:' actualizado en la receta de '+prod));
+  document.getElementById('receta-prod-sel').value=prod;
+  renderRecetaDetalle();
+  toast((esNuevo?'✅ ':'💾 ')+nombre+(esNuevo?' agregado a la receta':' actualizado'));
 }
 function delIngReceta(prod,nombre){
   const recetas=getObj(K.recetas,{});
@@ -3299,49 +3338,131 @@ function renderMetaMensual(){
   const totalFijos=lista.reduce((s,g)=>s+g.monto,0);
   const diasMes=new Date(ahora.getFullYear(),ahora.getMonth()+1,0).getDate();
   const diaActual=ahora.getDate();
-  const diasRestantes=diasMes-diaActual;
-  const metaDiaria=totalFijos/diasMes;
+  const diasRestantes=Math.max(0,diasMes-diaActual);
+  const diasTranscurridos=Math.max(1,diaActual);
 
-  // ventas del mes actual
-  const mesStr=`${ahora.getFullYear()}-${ahora.getMonth()+1}`;
-  const ventasMes=get(K.orders)
-    .filter(o=>o.pagado&&o.date&&o.date.startsWith(mesStr.replace('-','-')))
-    .reduce((s,o)=>s+o.total,0);
-
-  // más preciso: filtrar por año y mes
-  const ventasMesReal=get(K.orders).filter(o=>{
+  // --- Ventas pagadas del mes en curso ---
+  const pedidosMes=get(K.orders).filter(o=>{
     if(!o.pagado||!o.date)return false;
-    const p=o.date.split('-');
-    return parseInt(p[0])===ahora.getFullYear()&&parseInt(p[1])===(ahora.getMonth()+1);
-  }).reduce((s,o)=>s+o.total,0);
+    const pr=o.date.split('-');
+    return parseInt(pr[0])===ahora.getFullYear()&&parseInt(pr[1])===(ahora.getMonth()+1);
+  });
+  const ventasMesReal=pedidosMes.reduce((s,o)=>s+o.total,0);
 
-  const falta=Math.max(0,totalFijos-ventasMesReal);
-  const pct=Math.min(100,Math.round(ventasMesReal/totalFijos*100));
-  const metaDiariaRestante=diasRestantes>0?falta/diasRestantes:0;
-  const barColor=pct>=100?'#8a4a20':pct>=60?'#e67e22':'#e05a2b';
+  // --- COSTO VARIABLE REAL: lo que costó producir lo que se vendió ---
+  // Se recorre cada ítem vendido y se valoriza su receta a costo de insumo.
+  let costoVariable=0, unidadesVendidas=0, itemsSinCosteo=0;
+  const porProducto={};
+  pedidosMes.forEach(o=>{
+    (o.items||[]).forEach(it=>{
+      const c=costoReceta(it.name);
+      const costoItem=c.total||0;
+      costoVariable+=costoItem;
+      unidadesVendidas++;
+      if(!costoItem)itemsSinCosteo++;
+      if(!porProducto[it.name])porProducto[it.name]={n:0,ingreso:0,costo:0};
+      porProducto[it.name].n++;
+      porProducto[it.name].ingreso+=(it.price||0);
+      porProducto[it.name].costo+=costoItem;
+    });
+  });
+
+  // --- Margen de contribución: de cada sol vendido, cuánto queda tras insumos ---
+  let mcPct;
+  if(ventasMesReal>0&&costoVariable>0){
+    mcPct=(ventasMesReal-costoVariable)/ventasMesReal;
+  }else{
+    // Sin ventas aún: se estima con el margen teórico de la carta
+    const prods=getMenu().flatMap(g=>g.items);
+    const conCosto=prods.map(([n,pr])=>{const c=costoReceta(n).total||0;return c>0&&pr>0?(pr-c)/pr:null;}).filter(x=>x!==null);
+    mcPct=conCosto.length?conCosto.reduce((a,b)=>a+b,0)/conCosto.length:null;
+  }
+
+  // --- Punto de equilibrio: venta necesaria para no perder plata ---
+  const equilibrio=(mcPct&&mcPct>0)?totalFijos/mcPct:null;
+  const utilidad=ventasMesReal-costoVariable-totalFijos;
+  const faltaVender=equilibrio?Math.max(0,equilibrio-ventasMesReal):null;
+  const ticket=unidadesVendidas>0?ventasMesReal/unidadesVendidas:0;
+  const pct=equilibrio?Math.min(100,Math.round(ventasMesReal/equilibrio*100)):0;
+  const barColor=pct>=100?'#2E7D32':pct>=60?'#e67e22':'#c0392b';
+  const ventaDiaNecesaria=(faltaVender&&diasRestantes>0)?faltaVender/diasRestantes:0;
+  const unidadesDia=(ventaDiaNecesaria&&ticket>0)?Math.ceil(ventaDiaNecesaria/ticket):0;
+  const ritmoDiario=ventasMesReal/diasTranscurridos;
+  const proyeccion=ritmoDiario*diasMes;
+
+  // --- Rentabilidad por producto (los que más dejan, no los que más venden) ---
+  const ranking=Object.entries(porProducto)
+    .map(([n,d])=>({n,unidades:d.n,ingreso:d.ingreso,costo:d.costo,aporte:d.ingreso-d.costo}))
+    .sort((a,b)=>b.aporte-a.aporte);
+
+  const sinCosteoAviso=itemsSinCosteo>0
+    ? `<div style="background:#fff8e1;border-radius:8px;padding:10px 14px;font-size:12px;color:#856404;margin-bottom:10px">
+        ⚠️ ${itemsSinCosteo} producto(s) vendido(s) no tienen receta o costo cargado. El costo real es mayor y el margen mostrado, optimista.
+       </div>`:'';
 
   content.innerHTML=`
+    ${sinCosteoAviso}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
       <div class="stat-card"><div class="sc-val r">${fmt(totalFijos)}</div><div class="sc-lbl">Gastos fijos del mes</div></div>
       <div class="stat-card"><div class="sc-val" style="color:#8a4a20">${fmt(ventasMesReal)}</div><div class="sc-lbl">Vendido este mes</div></div>
-      <div class="stat-card"><div class="sc-val" style="color:${falta>0?'#e05a2b':'#8a4a20'}">${falta>0?fmt(falta):'✅ Cubierto'}</div><div class="sc-lbl">Falta cubrir</div></div>
-      <div class="stat-card"><div class="sc-val o">${fmt(metaDiaria)}</div><div class="sc-lbl">Meta diaria necesaria</div></div>
+      <div class="stat-card"><div class="sc-val o">${mcPct!==null?(mcPct*100).toFixed(0)+'%':'—'}</div><div class="sc-lbl">Margen de contribución</div></div>
+      <div class="stat-card"><div class="sc-val" style="color:#c0392b">${equilibrio?fmt(equilibrio):'—'}</div><div class="sc-lbl">Punto de equilibrio</div></div>
     </div>
+
+    <div style="background:#f7f7f5;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:#666;line-height:1.5">
+      💡 <strong>Cómo se lee:</strong> de cada S/1 que vendes, te quedan
+      <strong>${mcPct!==null?'S/'+mcPct.toFixed(2):'—'}</strong> después de pagar los insumos.
+      El resto se fue en masa, relleno y empaque. Por eso, para cubrir
+      <strong>${fmt(totalFijos)}</strong> de gastos fijos no basta con vender esa cifra:
+      hay que vender <strong>${equilibrio?fmt(equilibrio):'—'}</strong>.
+    </div>
+
     <div style="margin-bottom:6px;display:flex;justify-content:space-between;font-size:13px;color:#555">
-      <span>Progreso del mes</span><strong style="color:${barColor}">${pct}%</strong>
+      <span>Avance hacia el punto de equilibrio</span><strong style="color:${barColor}">${pct}%</strong>
     </div>
-    <div style="background:#f0ede8;border-radius:8px;height:22px;overflow:hidden;margin-bottom:10px">
+    <div style="background:#EEF0F3;border-radius:8px;height:22px;overflow:hidden;margin-bottom:12px">
       <div style="height:100%;border-radius:8px;background:${barColor};width:${pct}%;transition:width .5s"></div>
     </div>
-    ${falta>0&&diasRestantes>0?`<div style="background:#fff8e1;border-radius:8px;padding:10px 14px;font-size:13px;color:#856404">
-      📅 Quedan <strong>${diasRestantes} días</strong> en el mes. Necesitas vender <strong>${fmt(metaDiariaRestante)}/día</strong> para cubrir los gastos fijos.
+
+    <div style="background:${utilidad>=0?'#E3F2E7':'#FDECEA'};border-radius:10px;padding:12px 14px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:13px;font-weight:700;color:${utilidad>=0?'#1B5E35':'#B3261E'}">
+          ${utilidad>=0?'✅ Ganancia real del mes':'🔴 Pérdida real del mes'}
+        </span>
+        <strong style="font-size:20px;color:${utilidad>=0?'#1B5E35':'#B3261E'}">${fmt(Math.abs(utilidad))}</strong>
+      </div>
+      <div style="font-size:11px;color:#666;margin-top:6px">
+        Ventas ${fmt(ventasMesReal)} − insumos ${fmt(costoVariable)} − gastos fijos ${fmt(totalFijos)}
+      </div>
+    </div>
+
+    ${faltaVender>0&&diasRestantes>0?`<div style="background:#fff8e1;border-radius:8px;padding:10px 14px;font-size:13px;color:#856404;margin-bottom:12px">
+      📅 Quedan <strong>${diasRestantes} días</strong>. Para no perder plata necesitas vender
+      <strong>${fmt(ventaDiaNecesaria)}/día</strong>${unidadesDia>0?` — unas <strong>${unidadesDia} unidades diarias</strong> al ticket actual de ${fmt(ticket)}`:''}.
     </div>`:''}
-    ${pct>=100?`<div style="background:#d1f0d5;border-radius:8px;padding:10px 14px;font-size:13px;color:#1a7a2a">
-      🎉 ¡Ya cubriste todos los gastos fijos del mes! Lo que vendas de aquí en adelante es ganancia neta.
+    ${pct>=100?`<div style="background:#E3F2E7;border-radius:8px;padding:10px 14px;font-size:13px;color:#1B5E35;margin-bottom:12px">
+      🎉 Ya pasaste el punto de equilibrio. De aquí en adelante, de cada S/1 que vendas te quedan
+      <strong>S/${mcPct.toFixed(2)}</strong> limpios.
     </div>`:''}
-    <div style="margin-top:12px">
+
+    ${ventasMesReal>0?`<div style="background:#f7f7f5;border-radius:8px;padding:10px 14px;font-size:12px;color:#666;margin-bottom:12px">
+      📈 Al ritmo actual (${fmt(ritmoDiario)}/día) cerrarías el mes en <strong>${fmt(proyeccion)}</strong>.
+    </div>`:''}
+
+    ${ranking.length?`<div style="margin-top:14px">
+      <div style="font-size:12px;font-weight:700;color:#888;margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px">Cuánto deja cada producto</div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:#aaa;font-weight:700;text-transform:uppercase;padding-bottom:4px;border-bottom:1px solid #eee;margin-bottom:4px">
+        <span>Producto</span><span>Vendidas · Deja</span>
+      </div>
+      ${ranking.slice(0,8).map(r=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f0f0f0;font-size:13px">
+        <span>${r.n}</span>
+        <span style="white-space:nowrap"><span style="color:#999">${r.unidades}×</span> <strong style="color:${r.aporte>=0?'#1B5E35':'#B3261E'}">${fmt(r.aporte)}</strong></span>
+      </div>`).join('')}
+    </div>`:''}
+
+    <div style="margin-top:14px">
       <div style="font-size:12px;font-weight:700;color:#888;margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px">Desglose de gastos fijos</div>
-      ${lista.map(g=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0ede8;font-size:13px"><span>${g.nombre}</span><span style="font-weight:600;color:#e05a2b">${fmt(g.monto)}</span></div>`).join('')}
+      ${lista.map(g=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #EEF0F3;font-size:13px"><span>${g.nombre}</span><span style="font-weight:600;color:#F57C00">${fmt(g.monto)}</span></div>`).join('')}
     </div>`;
 }
 
