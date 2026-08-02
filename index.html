@@ -76,7 +76,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .oi-name{font-weight:600;font-size:14px;}
 .oi-price{font-weight:700;color:#e05a2b;font-size:13px;white-space:nowrap;}
 .oi-note{font-size:11px;color:#888;margin-top:3px;}
-.oi-rm{background:none;border:1px solid #f5c6cb;color:#e74c3c;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px;margin-top:6px;}
+.oi-rm{background:none;border:1px solid #f5c6cb;color:#e74c3c;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;margin-top:6px;}
+/* Botones de cantidad del pedido: se tocan muchas veces por comanda */
+.cart-qty{width:40px;height:40px;border-radius:50%;border:1.5px solid #ddd;background:white;color:#333;font-size:20px;font-weight:700;cursor:pointer;line-height:1;display:inline-flex;align-items:center;justify-content:center;transition:transform .12s,background .12s;}
+.cart-qty:active{transform:scale(.9);background:#f0ede8;}
 
 /* TOTAL */
 .total-bar{background:#8a4a20;color:white;padding:12px 16px;border-radius:10px;display:flex;justify-content:space-between;align-items:center;margin:10px 0;}
@@ -1709,6 +1712,25 @@ function confirmProduct(){
 
 // ===== CART =====
 function removeItem(i){cartItems.splice(i,1);renderCart();}
+// Cada línea del pedido agrupa unidades idénticas: estas funciones suman o
+// restan una sola unidad de ese grupo.
+function _claveItem(it){return it.name+'||'+(it.nota||'')+'||'+it.price;}
+function agregarUno(clave){
+  const base=cartItems.find(it=>_claveItem(it)===clave);
+  if(!base)return;
+  cartItems.push({...base});
+  renderCart();
+}
+function quitarUno(clave){
+  for(let i=cartItems.length-1;i>=0;i--){
+    if(_claveItem(cartItems[i])===clave){cartItems.splice(i,1);break;}
+  }
+  renderCart();
+}
+function quitarGrupo(clave){
+  cartItems=cartItems.filter(it=>_claveItem(it)!==clave);
+  renderCart();
+}
 function renderCart(){
   const box=document.getElementById('o-items');
   const bar=document.getElementById('o-total-bar');
@@ -1717,19 +1739,47 @@ function renderCart(){
   const warn=document.getElementById('caja-warn-pedidos');
   if(!cartItems.length){box.innerHTML='';bar.style.display='none';aw.style.display='none';mw.style.display='none';warn.innerHTML='';return;}
   let total=0;
-  box.innerHTML=cartItems.map((it,i)=>{
+  // Las unidades iguales se muestran juntas ("3× Empanada de Carne"). Por dentro
+  // el carrito sigue siendo una unidad por línea, que es lo que necesita el
+  // descuento de stock; esto es solo cómo se ve.
+  const grupos=[];
+  const indice={};
+  cartItems.forEach((it,i)=>{
     total+=it.price;
+    const clave=it.name+'||'+(it.nota||'')+'||'+it.price;
+    if(indice[clave]===undefined){
+      indice[clave]=grupos.length;
+      grupos.push({...it,cant:1,posiciones:[i],clave});
+    }else{
+      const g=grupos[indice[clave]];
+      g.cant++;g.posiciones.push(i);
+    }
+  });
+  box.innerHTML=grupos.map(g=>{
     const dets=[];
-    if(it.sinCremas)dets.push('Sin salsas');
-    else if(it.cremas&&it.cremas.length)dets.push('Salsas: '+it.cremas.join(', '));
-    if(it.adicionales&&it.adicionales.length)dets.push('+ '+it.adicionales.map(a=>a.qty>1?`${a.qty}x ${a.name}`:a.name).join(', '));
-    if(it.ensalada)dets.push(it.ensalada==='con'?'Con ensalada':'Sin ensalada');
-    if(it.papas)dets.push('Papas: '+it.papas);
+    if(g.sinCremas)dets.push('Sin salsas');
+    else if(g.cremas&&g.cremas.length)dets.push('Salsas: '+g.cremas.join(', '));
+    if(g.adicionales&&g.adicionales.length)dets.push('+ '+g.adicionales.map(a=>a.qty>1?`${a.qty}x ${a.name}`:a.name).join(', '));
+    if(g.ensalada)dets.push(g.ensalada==='con'?'Con ensalada':'Sin ensalada');
+    if(g.papas)dets.push('Papas: '+g.papas);
+    const esc=g.clave.replace(/'/g,"\\'").replace(/"/g,'&quot;');
     return `<div class="oi">
       <div class="oi-top">
-        <div><div class="oi-name">${it.name}</div><div class="oi-price">${fmt(it.price)}</div>${dets.length?`<div class="oi-note">${dets.join(' · ')}</div>`:''}</div>
+        <div style="flex:1;min-width:0">
+          <div class="oi-name">${g.cant>1?`<span style="color:#8a4a20">${g.cant}× </span>`:''}${g.name}</div>
+          ${dets.length?`<div class="oi-note">${dets.join(' · ')}</div>`:''}
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div class="oi-price">${fmt(g.price*g.cant)}</div>
+          ${g.cant>1?`<div style="font-size:11px;color:#999">${fmt(g.price)} c/u</div>`:''}
+        </div>
       </div>
-      <button class="oi-rm" onclick="removeItem(${i})">× Quitar</button>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+        <button class="cart-qty" onclick="quitarUno('${esc}')" aria-label="Quitar uno">−</button>
+        <span style="font-size:15px;font-weight:800;min-width:22px;text-align:center">${g.cant}</span>
+        <button class="cart-qty" onclick="agregarUno('${esc}')" aria-label="Agregar uno">+</button>
+        <button class="oi-rm" style="margin-top:0;margin-left:auto" onclick="quitarGrupo('${esc}')">Quitar</button>
+      </div>
     </div>`;
   }).join('');
   bar.style.display='flex';
@@ -2171,6 +2221,14 @@ function confirmAjuste(){
   renderStockList('dueno');renderStockList('cajera');
 }
 
+const _filtroStock={cajera:'',dueno:''};
+function filtrarStock(who,valor){
+  _filtroStock[who]=valor;
+  renderStockList(who);
+  // Al re-dibujar la lista se pierde el foco: se devuelve al buscador
+  const inp=document.getElementById('buscar-stock-'+who);
+  if(inp){inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length);}
+}
 function renderStockList(who){
   const stocks=get(K.stocks);
   const cfg=getConfig();
@@ -2193,7 +2251,29 @@ function renderStockList(who){
     </div>`;
   }
 
-  html+=stocks.map(s=>{
+  // Buscador: con 40 insumos, encontrar uno a puro scroll es lento
+  html+=`<div style="position:relative;margin-bottom:12px">
+    <input id="buscar-stock-${who}" type="search" placeholder="🔍 Buscar insumo..." value="${(_filtroStock[who]||'').replace(/"/g,'&quot;')}"
+      oninput="filtrarStock('${who}',this.value)"
+      style="width:100%;min-height:48px;padding:12px 14px;border:1.5px solid #ddd;border-radius:12px;font-size:15px;font-family:inherit;box-sizing:border-box">
+  </div>`;
+
+  // Lo que está por acabarse va primero: es a lo que se entra a mirar
+  const filtro=(_filtroStock[who]||'').trim().toLowerCase();
+  let lista=stocks.filter(s=>!filtro||s.name.toLowerCase().includes(filtro));
+  lista=lista.slice().sort((a,b)=>{
+    const aLow=a.qty<=a.min?0:1, bLow=b.qty<=b.min?0:1;
+    if(aLow!==bLow)return aLow-bLow;
+    return a.name.localeCompare(b.name,'es');
+  });
+  const bajos=lista.filter(s=>s.qty<=s.min).length;
+  if(!lista.length){
+    html+=`<div class="empty">No hay insumos que coincidan con "${filtro}"</div>`;
+  }else if(bajos&&!filtro){
+    html+=`<div style="font-size:11px;font-weight:800;color:#B3261E;text-transform:uppercase;letter-spacing:.5px;margin:4px 0 8px">⚠️ Hay que reponer (${bajos})</div>`;
+  }
+
+  html+=lista.map((s,ix)=>{
     const vida=s.diasVida||cfg.vidasUtil[s.name]||0;
     const dias=daysSince(s.fechaIngreso||todayStr());
     const vencido=vida>0&&dias>=vida&&s.qty>0;
@@ -2203,15 +2283,21 @@ function renderStockList(who){
     const costoInfo=costoUnit>0?` · <span style="color:#888">S/${costoUnit.toFixed(2)}/${s.unit}</span>`:'';
     const vidaColor=vencido?'#c0392b':dias>=vida*0.75?'#e67e22':'#888';
     const vidaInfo=vida>0?` · <span style="color:${vidaColor}">${vida}d vida (${dias}d uso)</span>`:'';
+    // "Eliminar" borra el historial de costos y rompe las recetas que usan el
+    // insumo. Se usa dos veces al año; "Añadir", diez veces al día. Por eso
+    // deja de ser un botón rojo del mismo tamaño y pasa a un ícono discreto.
     const adminBtns=who==='dueno'
       ?`<button class="btn btn-green btn-sm" onclick="openAddStockModal(${s.id})">+ Añadir</button>
-         <button class="btn btn-gray btn-sm" onclick="openEditStockModal(${s.id})">✏️ Editar</button>
-         <button class="btn btn-danger btn-sm" onclick="deleteStock(${s.id})">Eliminar</button>`
+         <button class="btn btn-outline btn-sm" onclick="openEditStockModal(${s.id})">✏️ Editar</button>
+         <button onclick="deleteStock(${s.id})" title="Eliminar insumo"
+           style="margin-left:auto;background:none;border:none;color:#c9c2b8;font-size:17px;cursor:pointer;padding:6px 8px;line-height:1">🗑</button>`
       :'';
-    return `<div class="stock-item ${cls}">
+    const primeroBueno=!filtro&&bajos>0&&ix===bajos;
+    return `${primeroBueno?'<div style="font-size:11px;font-weight:800;color:#999;text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px">Con stock suficiente</div>':''}
+    <div class="stock-item ${cls}">
       <div class="si-top"><span class="si-name">${vencido?'🗑️':low?'⚠️':'✅'} ${s.name}</span><span class="si-qty">${s.qty} ${s.unit}</span></div>
       <div class="si-meta">Mín: ${s.min} ${s.unit}${costoInfo}${vidaInfo}</div>
-      ${adminBtns?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${adminBtns}</div>`:''}
+      ${adminBtns?`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">${adminBtns}</div>`:''}
     </div>`;
   }).join('');
 
